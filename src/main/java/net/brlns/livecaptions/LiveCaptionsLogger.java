@@ -119,7 +119,7 @@ public class LiveCaptionsLogger{
 				popup.add(menuItem);
 			}
 
-			{//In case the text is NOT black and white you might need to toggle this
+			{//Debug output is displayed in the console when the program is started via cmd
 				MenuItem menuItem = new MenuItem("Toggle Debug Mode");
 				menuItem.addActionListener((ActionEvent e) -> {
 					debugMode = !debugMode;
