@@ -1,5 +1,7 @@
 package net.brlns.livecaptions;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.*;
 import java.awt.color.ColorSpace;
 import java.awt.event.ActionEvent;
@@ -20,6 +22,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
+import lombok.Data;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import net.sourceforge.tess4j.util.LoadLibs;
@@ -32,16 +35,40 @@ public class LiveCaptionsLogger{
 	 *
 	 * Only tested at 1080p
 	 */
-	private static final int boxStartX = 15;
-	private static final int boxStartY = 15;
+	@Data
+	public static class Config{
 
-	private static final int boxEndX = 1795;
-	private static final int boxEndY = 103;
+		@JsonProperty("PixelStartX")
+		public int boxStartX = 15;
+		@JsonProperty("PixelStartY")
+		public int boxStartY = 15;
 
-	private static final String tessLanguage = "eng";
-	private static final String outputFolder = "LiveCaptions";
+		@JsonProperty("PixelEndX")
+		public int boxEndX = 1795;
+		@JsonProperty("PixelEndY")
+		public int boxEndY = 103;
 
-	private boolean currentlyLogging = true;//Default ON?
+		@JsonProperty("TesseractLanguage")
+		public String tessLanguage = "eng";
+		@JsonProperty("OutputDirectoryName")
+		public String outputFolder = "LiveCaptions";
+
+		@JsonProperty("ContrastMode")
+		public boolean contrastMode = false;
+		@JsonProperty("DebugMode")
+		public boolean debugMode = false;
+		@JsonProperty("LogAtStartup")
+		public boolean currentlyLogging = true;
+
+		/**
+		 * If you need to use languages other than English,
+		 * download tesseract from https://github.com/UB-Mannheim/tesseract/wiki and point this to your own tessdata folder,
+		 * Typically that would be C:\Program Files\Tesseract-OCR\tessdata
+		 */
+		@JsonProperty("CustomTessDataPath")
+		public String customTessDataPath = "";
+
+	}
 
 	/**
 	 * Constants and application states
@@ -58,11 +85,30 @@ public class LiveCaptionsLogger{
 
 	private final SystemTray tray;
 	private TrayIcon trayIcon = null;
-	private boolean contrastMode = false;
-	private boolean debugMode = false;
+
+	private File configFile = new File("config.json");
+	private Config config;
+
+	private ObjectMapper objectMapper = new ObjectMapper();
 
 	public LiveCaptionsLogger(){
 		tray = SystemTray.getSystemTray();
+
+		if(!configFile.exists()){
+			try{
+				objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, new Config());
+			}catch(IOException e){
+				handleException(e);
+			}
+		}
+
+		try{
+			config = objectMapper.readValue(configFile, Config.class);
+		}catch(IOException e){
+			config = new Config();
+
+			handleException(e);
+		}
 
 		try{
 			PopupMenu popup = new PopupMenu();
@@ -70,17 +116,19 @@ public class LiveCaptionsLogger{
 			{
 				MenuItem menuItem = new MenuItem("Toggle LiveCaptions Logging");
 				menuItem.addActionListener((ActionEvent e) -> {
-					currentlyLogging = !currentlyLogging;
+					config.setCurrentlyLogging(!config.isCurrentlyLogging());
 
-					if(!currentlyLogging){
+					if(!config.isCurrentlyLogging()){
 						closeLogger();
 					}
+
+					updateConfig();
 
 					if(trayIcon == null){
 						throw new RuntimeException("This wasn't supposed to run yet");
 					}
 
-					trayIcon.displayMessage("LiveCaptions Logger", "Live caption logging is now " + (currentlyLogging ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+					trayIcon.displayMessage("LiveCaptions Logger", "Live caption logging is now " + (config.isCurrentlyLogging() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
 				});
 
 				popup.add(menuItem);
@@ -89,13 +137,15 @@ public class LiveCaptionsLogger{
 			{//In case the text is NOT black and white you might need to toggle this
 				MenuItem menuItem = new MenuItem("Toggle Contrast Mode");
 				menuItem.addActionListener((ActionEvent e) -> {
-					contrastMode = !contrastMode;
+					config.setContrastMode(!config.isContrastMode());
+
+					updateConfig();
 
 					if(trayIcon == null){
 						throw new RuntimeException("This wasn't supposed to run yet");
 					}
 
-					trayIcon.displayMessage("LiveCaptions Logger", "Contrast mode is now " + (contrastMode ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+					trayIcon.displayMessage("LiveCaptions Logger", "Contrast mode is now " + (config.isContrastMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
 				});
 
 				popup.add(menuItem);
@@ -122,13 +172,15 @@ public class LiveCaptionsLogger{
 			{//Debug output is displayed in the console when the program is started via cmd
 				MenuItem menuItem = new MenuItem("Toggle Debug Mode");
 				menuItem.addActionListener((ActionEvent e) -> {
-					debugMode = !debugMode;
+					config.setDebugMode(!config.isDebugMode());
+
+					updateConfig();
 
 					if(trayIcon == null){
 						throw new RuntimeException("This wasn't supposed to run yet");
 					}
 
-					trayIcon.displayMessage("LiveCaptions Logger", "Debug mode is now " + (debugMode ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+					trayIcon.displayMessage("LiveCaptions Logger", "Debug mode is now " + (config.isDebugMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
 				});
 
 				popup.add(menuItem);
@@ -152,7 +204,7 @@ public class LiveCaptionsLogger{
 
 			trayIcon.addActionListener((ActionEvent e) -> {
 				try{
-					File file = new File(getDocumentsPath(), outputFolder);
+					File file = new File(getDocumentsPath(), config.getOutputFolder());
 					if(!file.exists()){
 						file.mkdirs();
 					}
@@ -169,7 +221,7 @@ public class LiveCaptionsLogger{
 
 			Rectangle screenBounds = screen.getDefaultConfiguration().getBounds();
 
-			if(debugMode){
+			if(config.isDebugMode()){
 				System.out.println("Screen bounds: " + screenBounds);
 			}
 
@@ -179,12 +231,12 @@ public class LiveCaptionsLogger{
 			double screenWidth = screenSize.getWidth();
 			double screenHeight = screenSize.getHeight();
 
-			double startPercentageX = (double)boxStartX / screenWidth * 100.0;
-			double startPercentageY = (double)boxStartY / screenHeight * 100.0;
-			double endPercentageX = (double)boxEndX / screenWidth * 100.0;
-			double endPercentageY = (double)boxEndY / screenHeight * 100.0;
+			double startPercentageX = (double)config.getBoxStartX() / screenWidth * 100.0;
+			double startPercentageY = (double)config.getBoxStartY() / screenHeight * 100.0;
+			double endPercentageX = (double)config.getBoxEndX() / screenWidth * 100.0;
+			double endPercentageY = (double)config.getBoxEndY() / screenHeight * 100.0;
 
-			if(debugMode){
+			if(config.isDebugMode()){
 				System.out.println("Percentage Coordinates:");
 				System.out.println("StartX: " + startPercentageX + "%");
 				System.out.println("StartY: " + startPercentageY + "%");
@@ -195,16 +247,16 @@ public class LiveCaptionsLogger{
 			int screenResolution = toolkit.getScreenResolution();
 			double scalingFactor = 96.0 / screenResolution; // Invert the scaling factor
 
-			if(debugMode){
+			if(config.isDebugMode()){
 				System.out.println("Scaling Factor: " + scalingFactor);
 			}
 
-			int scaledBoxStartX = (int)(boxStartX * scalingFactor);
-			int scaledBoxStartY = (int)(boxStartY * scalingFactor);
-			int scaledBoxEndX = (int)(boxEndX * scalingFactor);
-			int scaledBoxEndY = (int)(boxEndY * scalingFactor);
+			int scaledBoxStartX = (int)(config.getBoxStartX() * scalingFactor);
+			int scaledBoxStartY = (int)(config.getBoxStartY() * scalingFactor);
+			int scaledBoxEndX = (int)(config.getBoxEndX() * scalingFactor);
+			int scaledBoxEndY = (int)(config.getBoxEndY() * scalingFactor);
 
-			if(debugMode){
+			if(config.isDebugMode()){
 				System.out.println("Scaled Rectangle Coordinates:");
 				System.out.println("StartX: " + scaledBoxStartX);
 				System.out.println("StartY: " + scaledBoxStartY);
@@ -217,27 +269,35 @@ public class LiveCaptionsLogger{
 				scaledBoxEndX - scaledBoxStartX,
 				scaledBoxEndY - scaledBoxStartY);
 
-			File tessDataFolder = LoadLibs.extractTessResources("tessdata");
-			System.out.println(tessDataFolder);
+			File tessDataFolder;
+			if(config.getCustomTessDataPath().isEmpty()){
+				tessDataFolder = LoadLibs.extractTessResources("tessdata");
+			}else{
+				tessDataFolder = new File(config.getCustomTessDataPath());
+			}
+
+			if(!tessDataFolder.exists()){
+				throw new RuntimeException("tessdata folder not found!");
+			}
 
 			Tesseract tesseract = new Tesseract();
 
 			tesseract.setDatapath(tessDataFolder.getAbsolutePath());
-			tesseract.setLanguage(tessLanguage);
+			tesseract.setLanguage(config.getTessLanguage());
 
 			JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
 			Runnable captureAndProcess = () -> {
-				if(debugMode){
+				if(config.isDebugMode()){
 					System.out.println("Tick Tock");
 				}
 
-				if(!currentlyLogging){
+				if(!config.isCurrentlyLogging()){
 					return;
 				}
 
 				BufferedImage screenshot = robot.createScreenCapture(screenRect);
 
-				if(debugMode){
+				if(config.isDebugMode()){
 					try{
 						saveImageToPictures(screenshot, "cc_debug.png");
 					}catch(IOException e){
@@ -246,7 +306,7 @@ public class LiveCaptionsLogger{
 				}
 
 				if(!inCaptionBox(screenshot)){
-					if(debugMode){
+					if(config.isDebugMode()){
 						System.out.println("CC Window not detected");
 					}
 
@@ -271,7 +331,7 @@ public class LiveCaptionsLogger{
 									return;
 								}
 
-								if(debugMode){
+								if(config.isDebugMode()){
 									System.out.println("OCR Saw: " + text);
 								}
 
@@ -282,7 +342,7 @@ public class LiveCaptionsLogger{
 									for(String oldLine : lastLines){
 										//This checks if more than 80% of a line matches the other
 										double distance = jaroWinklerDistance.apply(oldLine, line);
-										if(debugMode){
+										if(config.isDebugMode()){
 											System.out.println("Distance between previous line " + distance + " " + oldLine + ":" + line);
 										}
 
@@ -296,7 +356,7 @@ public class LiveCaptionsLogger{
 
 										double distance = jaroWinklerDistance.apply(oldestEntry,
 											lastPrintedLine != null ? lastPrintedLine : "");
-										if(debugMode){
+										if(config.isDebugMode()){
 											System.out.println("Distance from the last line " + distance);
 										}
 
@@ -327,7 +387,7 @@ public class LiveCaptionsLogger{
 						tesseractLock.unlock();
 					}
 				}else{
-					if(debugMode){
+					if(config.isDebugMode()){
 						System.out.println("Could not acquire lock. Skipping OCR.");
 					}
 				}
@@ -353,6 +413,14 @@ public class LiveCaptionsLogger{
 		ImageIO.write(image, "png", destinationFile);
 	}
 
+	private void updateConfig(){
+		try{
+			objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, config);
+		}catch(IOException e){
+			handleException(e);
+		}
+	}
+
 	private boolean checkStartupStatusAndToggle(){
 		try{
 			ProcessBuilder checkBuilder = new ProcessBuilder("reg", "query",
@@ -372,7 +440,7 @@ public class LiveCaptionsLogger{
 				Process updateProcess = deleteBuilder.start();
 				updateProcess.waitFor();
 
-				if(debugMode){
+				if(config.isDebugMode()){
 					int updateExitValue = updateProcess.exitValue();
 					if(updateExitValue == 0){
 						System.out.println("Startup entry updated successfully.");
@@ -393,7 +461,7 @@ public class LiveCaptionsLogger{
 				launchString = launchString.replace("target/LiveCaptionsLogger.jar", "start.bat");
 				launchString = launchString.replace("LiveCaptionsLogger.jar", "start.bat");
 				launchString = launchString.replace("classes", "start.bat");
-				if(debugMode){
+				if(config.isDebugMode()){
 					System.out.println(launchString);
 				}
 
@@ -413,7 +481,7 @@ public class LiveCaptionsLogger{
 
 				int exitCode = process.waitFor();
 
-				if(debugMode){
+				if(config.isDebugMode()){
 					if(exitCode == 0){
 						System.out.println("Registry entry added successfully.");
 					}else{
@@ -447,7 +515,7 @@ public class LiveCaptionsLogger{
 	 * Filter out non-white pixels for better visibility
 	 */
 	private BufferedImage filterWhite(BufferedImage image){
-		if(contrastMode){
+		if(config.isContrastMode()){
 			BufferedImage result = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
 			Graphics g = result.getGraphics();
 			g.drawImage(image, 0, 0, null);
@@ -493,7 +561,7 @@ public class LiveCaptionsLogger{
 			int green = (colour >> 8) & 0xFF;
 			int blue = colour & 0xFF;
 
-			if(debugMode){
+			if(config.isDebugMode()){
 				System.out.println(red + ":" + green + ":" + blue);
 			}
 
@@ -507,7 +575,7 @@ public class LiveCaptionsLogger{
 		if(currentFile == null){
 			Calendar now = Calendar.getInstance();
 
-			File path = new File(getDocumentsPath(), outputFolder);
+			File path = new File(getDocumentsPath(), config.getOutputFolder());
 			if(!path.exists()){
 				path.mkdirs();
 			}
