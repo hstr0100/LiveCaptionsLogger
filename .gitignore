@@ -1,0 +1,7 @@
+dependency-reduced-pom.xml
+nb-configuration.xml
+nbactions.xml
+
+# Ignore files and folders under ./target, except LiveCaptionsLogger.jar
+/target/*
+!/target/LiveCaptionsLogger.jar
