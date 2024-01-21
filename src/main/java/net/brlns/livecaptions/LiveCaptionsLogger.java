@@ -1,5 +1,6 @@
 package net.brlns.livecaptions;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.*;
@@ -22,6 +23,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
+import javax.swing.JFileChooser;
+import javax.swing.filechooser.FileSystemView;
 import lombok.Data;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
@@ -36,6 +39,7 @@ public class LiveCaptionsLogger{
      * Only tested at 1080p
      */
     @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Config{
 
         @JsonProperty("PixelStartX")
@@ -50,8 +54,8 @@ public class LiveCaptionsLogger{
 
         @JsonProperty("TesseractLanguage")
         public String tessLanguage = "eng";
-        @JsonProperty("OutputDirectoryName")
-        public String outputFolder = "LiveCaptions";
+        @JsonProperty("OutputPath")
+        public String outputPath = "";
 
         @JsonProperty("ContrastMode")
         public boolean contrastMode = false;
@@ -133,7 +137,7 @@ public class LiveCaptionsLogger{
                         throw new RuntimeException("This wasn't supposed to run yet");
                     }
 
-                    trayIcon.displayMessage("LiveCaptions Logger", "Live caption logging is now " + (config.isCurrentlyLogging() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+                    trayIcon.displayMessage(REGISTRY_APP_NAME, "Live caption logging is now " + (config.isCurrentlyLogging() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                 });
 
                 popup.add(menuItem);
@@ -150,7 +154,7 @@ public class LiveCaptionsLogger{
                         throw new RuntimeException("This wasn't supposed to run yet");
                     }
 
-                    trayIcon.displayMessage("LiveCaptions Logger", "Contrast mode is now " + (config.isContrastMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+                    trayIcon.displayMessage(REGISTRY_APP_NAME, "Contrast mode is now " + (config.isContrastMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                 });
 
                 popup.add(menuItem);
@@ -165,7 +169,7 @@ public class LiveCaptionsLogger{
                             throw new RuntimeException("This wasn't supposed to run yet");
                         }
 
-                        trayIcon.displayMessage("LiveCaptions Logger", "Application auto start is now " + (result ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+                        trayIcon.displayMessage(REGISTRY_APP_NAME, "Application auto start is now " + (result ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                     }catch(Exception e1){
                         handleException(e1);
                     }
@@ -185,7 +189,7 @@ public class LiveCaptionsLogger{
                         throw new RuntimeException("This wasn't supposed to run yet");
                     }
 
-                    trayIcon.displayMessage("LiveCaptions Logger", "Debug mode is now " + (config.isDebugMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+                    trayIcon.displayMessage(REGISTRY_APP_NAME, "Debug mode is now " + (config.isDebugMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                 });
 
                 popup.add(menuItem);
@@ -196,6 +200,19 @@ public class LiveCaptionsLogger{
                 menuItem.addActionListener((ActionEvent e) -> {
                     try{
                         this.openSnipper();
+                    }catch(Exception e1){
+                        handleException(e1);
+                    }
+                });
+
+                popup.add(menuItem);
+            }
+
+            {
+                MenuItem menuItem = new MenuItem("Configure Output Folder");
+                menuItem.addActionListener((ActionEvent e) -> {
+                    try{
+                        this.openDirectoryPicker();
                     }catch(Exception e1){
                         handleException(e1);
                     }
@@ -233,12 +250,18 @@ public class LiveCaptionsLogger{
             //Register to the system tray
             Image image = Toolkit.getDefaultToolkit().createImage(this.getClass().getResource("/assets/tray_icon.png"));
             trayIcon = new TrayIcon(image, "CC", popup);
-            trayIcon.setToolTip("LiveCaptions Logger");
+            trayIcon.setToolTip(REGISTRY_APP_NAME);
             trayIcon.setImageAutoSize(true);
 
             trayIcon.addActionListener((ActionEvent e) -> {
                 try{
-                    File file = new File(getDocumentsPath(), config.getOutputFolder());
+                    File file;
+                    if(config.getOutputPath().isEmpty()){
+                        file = new File(getDocumentsPath(), "LiveCaptions");
+                    }else{
+                        file = new File(config.getOutputPath());
+                    }
+
                     if(!file.exists()){
                         file.mkdirs();
                     }
@@ -396,6 +419,28 @@ public class LiveCaptionsLogger{
         }
     }
 
+    private void openDirectoryPicker(){
+        JFileChooser fileChooser = new JFileChooser(FileSystemView.getFileSystemView().getHomeDirectory());
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+
+        int result = fileChooser.showOpenDialog(null);
+
+        if(result == JFileChooser.APPROVE_OPTION){
+            String selectedDirectory = fileChooser.getSelectedFile().getAbsolutePath();
+
+            if(config.isDebugMode()){
+                System.out.println("Selected Directory: " + selectedDirectory);
+            }
+
+            trayIcon.displayMessage(REGISTRY_APP_NAME, "Output path set to " + selectedDirectory, TrayIcon.MessageType.INFO);
+
+            config.setOutputPath(selectedDirectory);
+
+            updateConfig();
+            closeLogger();
+        }
+    }
+
     private void updateScreenZone(){
         Toolkit toolkit = Toolkit.getDefaultToolkit();
 
@@ -454,7 +499,7 @@ public class LiveCaptionsLogger{
             updateScreenZone();
             updateConfig();
         }else{
-            trayIcon.displayMessage("LiveCaptions Logger",
+            trayIcon.displayMessage(REGISTRY_APP_NAME,
                 "Please select a larger area", TrayIcon.MessageType.INFO);
         }
     }
@@ -639,7 +684,7 @@ public class LiveCaptionsLogger{
                 System.out.println(red + ":" + green + ":" + blue);
             }
 
-            return red <= 30 && green <= 30 && blue <= 30;//All mostly black! seems to vary a bit. This has to be tweeked if not black & white
+            return red <= 30 && green <= 30 && blue <= 30;//All mostly black! seems to vary a bit. This has to be tweaked if not black & white
         });
     }
 
@@ -649,12 +694,18 @@ public class LiveCaptionsLogger{
         if(currentFile == null){
             Calendar now = Calendar.getInstance();
 
-            File path = new File(getDocumentsPath(), config.getOutputFolder());
-            if(!path.exists()){
-                path.mkdirs();
+            File file;
+            if(config.getOutputPath().isEmpty()){
+                file = new File(getDocumentsPath(), "LiveCaptions");
+            }else{
+                file = new File(config.getOutputPath());
             }
 
-            currentFile = new File(path, config.getOutputFolder() + "_" + FORMATTER.format(now.getTime()) + ".txt");
+            if(!file.exists()){
+                file.mkdirs();
+            }
+
+            currentFile = new File(file, "LiveCaptions_" + FORMATTER.format(now.getTime()) + ".txt");
         }
 
         //Open and close immediatelly so we don't keep a lock on the file
@@ -681,7 +732,7 @@ public class LiveCaptionsLogger{
             throw new RuntimeException(e);
         }
 
-        trayIcon.displayMessage("LiveCaptions Logger",
+        trayIcon.displayMessage(REGISTRY_APP_NAME,
             "An error occurred: " + e.getLocalizedMessage(), TrayIcon.MessageType.INFO);
     }
 
