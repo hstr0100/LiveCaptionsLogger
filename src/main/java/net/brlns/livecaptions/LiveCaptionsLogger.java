@@ -203,6 +203,15 @@ public class LiveCaptionsLogger{
             }
 
             {
+                MenuItem menuItem = new MenuItem("Start Live Captions");
+                menuItem.addActionListener((ActionEvent e) -> {
+                    startLiveCaptions();
+                });
+
+                popup.add(menuItem);
+            }
+
+            {
                 MenuItem menuItem = new MenuItem("Exit");
                 menuItem.addActionListener((ActionEvent e) -> {
                     System.out.println("Exiting....");
@@ -261,6 +270,7 @@ public class LiveCaptionsLogger{
             tesseract.setLanguage(config.getTessLanguage());
 
             JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
+
             Runnable captureAndProcess = () -> {
                 if(config.isDebugMode()){
                     System.out.println("Tick Tock");
@@ -424,13 +434,7 @@ public class LiveCaptionsLogger{
 
         this.snipper = null;
 
-        if(isWindows()){
-            try{
-                Runtime.getRuntime().exec("LiveCaptions.exe");
-            }catch(IOException e){
-                handleException(e);
-            }
-        }
+        startLiveCaptions();
     }
 
     public void setBounds(int startX, int startY, int endX, int endY){
@@ -459,6 +463,16 @@ public class LiveCaptionsLogger{
         File destinationFile = new File(picturesDirectory, fileName);
 
         ImageIO.write(image, "png", destinationFile);
+    }
+
+    private void startLiveCaptions(){
+        if(isWindows()){
+            try{
+                Runtime.getRuntime().exec("LiveCaptions.exe");
+            }catch(IOException e){
+                handleException(e);
+            }
+        }
     }
 
     private void updateConfig(){
