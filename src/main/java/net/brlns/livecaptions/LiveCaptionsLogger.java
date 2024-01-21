@@ -312,7 +312,7 @@ public class LiveCaptionsLogger{
 
                 if(config.isDebugMode() && tick % 10 == 0){
                     try{
-                        saveImageToPictures(screenshot, "cc_debug.png");
+                        saveDebugImage(screenshot, "cc_debug.png");
                     }catch(IOException e){
                         handleException(e);
                     }
@@ -500,13 +500,12 @@ public class LiveCaptionsLogger{
         }
     }
 
-    private void saveImageToPictures(BufferedImage image, String fileName) throws IOException{
-        String picturesDirectoryPath = getPicturesPath();
-
-        File picturesDirectory = new File(picturesDirectoryPath);
-        if(!picturesDirectory.exists()){
-            picturesDirectory.mkdirs();
-        }
+    /**
+     * Saves debug images (for troubleshooting) to the output
+     * folder if debugMode = true
+     */
+    private void saveDebugImage(BufferedImage image, String fileName) throws IOException{
+        File picturesDirectory = this.getOrCreateOutputDirectory();
 
         File destinationFile = new File(picturesDirectory, fileName);
 
@@ -717,17 +716,6 @@ public class LiveCaptionsLogger{
         }
 
         return file;
-    }
-
-    /**
-     * Path for the debugging images if debugMode = true
-     */
-    private String getPicturesPath(){
-        if(isWindows()){
-            return System.getProperty("user.home") + "\\Pictures";
-        }else{
-            return System.getProperty("user.home") + "/Pictures";
-        }
     }
 
     private String getDocumentsPath(){
