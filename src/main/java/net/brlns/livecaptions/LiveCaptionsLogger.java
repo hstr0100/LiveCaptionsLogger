@@ -81,10 +81,12 @@ public class LiveCaptionsLogger{
 
     private File currentFile;
     private String lastPrintedLine;
-    private List<String> lastLines = new ArrayList<>();
+    private final List<String> lastLines = new ArrayList<>();
 
     private final SystemTray tray;
     private TrayIcon trayIcon = null;
+
+    private Rectangle screenZone;
 
     private File configFile = new File("config.json");
     private Config config;
@@ -188,6 +190,19 @@ public class LiveCaptionsLogger{
             }
 
             {
+                MenuItem menuItem = new MenuItem("Configure Captions Area");
+                menuItem.addActionListener((ActionEvent e) -> {
+                    try{
+                        this.openSnipper();
+                    }catch(Exception e1){
+                        handleException(e1);
+                    }
+                });
+
+                popup.add(menuItem);
+            }
+
+            {
                 MenuItem menuItem = new MenuItem("Exit");
                 menuItem.addActionListener((ActionEvent e) -> {
                     System.out.println("Exiting....");
@@ -219,6 +234,7 @@ public class LiveCaptionsLogger{
             tray.add(trayIcon);
 
             GraphicsDevice screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
+            Robot robot = new Robot(screen);
 
             Rectangle screenBounds = screen.getDefaultConfiguration().getBounds();
 
@@ -226,49 +242,7 @@ public class LiveCaptionsLogger{
                 System.out.println("Screen bounds: " + screenBounds);
             }
 
-            Toolkit toolkit = Toolkit.getDefaultToolkit();
-
-            Dimension screenSize = toolkit.getScreenSize();
-            double screenWidth = screenSize.getWidth();
-            double screenHeight = screenSize.getHeight();
-
-            double startPercentageX = (double)config.getBoxStartX() / screenWidth * 100.0;
-            double startPercentageY = (double)config.getBoxStartY() / screenHeight * 100.0;
-            double endPercentageX = (double)config.getBoxEndX() / screenWidth * 100.0;
-            double endPercentageY = (double)config.getBoxEndY() / screenHeight * 100.0;
-
-            if(config.isDebugMode()){
-                System.out.println("Percentage Coordinates:");
-                System.out.println("StartX: " + startPercentageX + "%");
-                System.out.println("StartY: " + startPercentageY + "%");
-                System.out.println("EndX: " + endPercentageX + "%");
-                System.out.println("EndY: " + endPercentageY + "%");
-            }
-
-            int screenResolution = toolkit.getScreenResolution();
-            double scalingFactor = 96.0 / screenResolution; // Invert the scaling factor
-
-            if(config.isDebugMode()){
-                System.out.println("Scaling Factor: " + scalingFactor);
-            }
-
-            int scaledBoxStartX = (int)(config.getBoxStartX() * scalingFactor);
-            int scaledBoxStartY = (int)(config.getBoxStartY() * scalingFactor);
-            int scaledBoxEndX = (int)(config.getBoxEndX() * scalingFactor);
-            int scaledBoxEndY = (int)(config.getBoxEndY() * scalingFactor);
-
-            if(config.isDebugMode()){
-                System.out.println("Scaled Rectangle Coordinates:");
-                System.out.println("StartX: " + scaledBoxStartX);
-                System.out.println("StartY: " + scaledBoxStartY);
-                System.out.println("EndX: " + scaledBoxEndX);
-                System.out.println("EndY: " + scaledBoxEndY);
-            }
-
-            Robot robot = new Robot(screen);
-            Rectangle screenRect = new Rectangle(scaledBoxStartX, scaledBoxStartY,
-                scaledBoxEndX - scaledBoxStartX,
-                scaledBoxEndY - scaledBoxStartY);
+            updateScreenZone();
 
             File tessDataFolder;
             if(config.getCustomTessDataPath().isEmpty()){
@@ -296,7 +270,7 @@ public class LiveCaptionsLogger{
                     return;
                 }
 
-                BufferedImage screenshot = robot.createScreenCapture(screenRect);
+                BufferedImage screenshot = robot.createScreenCapture(screenZone);
 
                 if(config.isDebugMode()){
                     try{
@@ -338,38 +312,40 @@ public class LiveCaptionsLogger{
 
                                 String[] lines = text.split("\\n");
 
-                                for(String line : lines){
-                                    boolean contains = false;
-                                    for(String oldLine : lastLines){
-                                        //This checks if more than 80% of a line matches the other
-                                        double distance = jaroWinklerDistance.apply(oldLine, line);
-                                        if(config.isDebugMode()){
-                                            System.out.println("Distance between previous line " + distance + " " + oldLine + ":" + line);
+                                synchronized(lastLines){
+                                    for(String line : lines){
+                                        boolean contains = false;
+                                        for(String oldLine : lastLines){
+                                            //This checks if more than 80% of a line matches the other
+                                            double distance = jaroWinklerDistance.apply(oldLine, line);
+                                            if(config.isDebugMode()){
+                                                System.out.println("Distance between previous line " + distance + " " + oldLine + ":" + line);
+                                            }
+
+                                            if(distance <= 0.20 || oldLine.contains(line)){
+                                                contains = true;
+                                            }
                                         }
 
-                                        if(distance <= 0.20 || oldLine.contains(line)){
-                                            contains = true;
+                                        if(!contains && !lastLines.isEmpty()){
+                                            String oldestEntry = lastLines.remove(0);
+
+                                            double distance = jaroWinklerDistance.apply(oldestEntry,
+                                                lastPrintedLine != null ? lastPrintedLine : "");
+                                            if(config.isDebugMode()){
+                                                System.out.println("Distance from the last line " + distance);
+                                            }
+
+                                            if(distance > 0.20){
+                                                lastPrintedLine = oldestEntry;
+                                                logToFile(oldestEntry);
+                                            }
                                         }
                                     }
 
-                                    if(!contains && !lastLines.isEmpty()){
-                                        String oldestEntry = lastLines.remove(0);
-
-                                        double distance = jaroWinklerDistance.apply(oldestEntry,
-                                            lastPrintedLine != null ? lastPrintedLine : "");
-                                        if(config.isDebugMode()){
-                                            System.out.println("Distance from the last line " + distance);
-                                        }
-
-                                        if(distance > 0.20){
-                                            lastPrintedLine = oldestEntry;
-                                            logToFile(oldestEntry);
-                                        }
-                                    }
+                                    lastLines.clear();
+                                    lastLines.addAll(Arrays.asList(lines));
                                 }
-
-                                lastLines.clear();
-                                lastLines.addAll(Arrays.asList(lines));
                             }catch(TesseractException e){
                                 e.printStackTrace();
                             }
@@ -398,6 +374,77 @@ public class LiveCaptionsLogger{
             scheduler.scheduleAtFixedRate(captureAndProcess, 0, 1000, TimeUnit.MILLISECONDS);//1 Second? seems ok
         }catch(Exception e){
             handleException(e);
+        }
+    }
+
+    private void updateScreenZone(){
+        Toolkit toolkit = Toolkit.getDefaultToolkit();
+
+        int screenResolution = toolkit.getScreenResolution();
+        double scalingFactor = 96.0 / screenResolution;
+
+        if(config.isDebugMode()){
+            System.out.println("Scaling Factor: " + scalingFactor);
+        }
+
+        int scaledBoxStartX = (int)(config.getBoxStartX() * scalingFactor);
+        int scaledBoxStartY = (int)(config.getBoxStartY() * scalingFactor);
+        int scaledBoxEndX = (int)(config.getBoxEndX() * scalingFactor);
+        int scaledBoxEndY = (int)(config.getBoxEndY() * scalingFactor);
+
+        if(config.isDebugMode()){
+            System.out.println("Scaled Rectangle Coordinates:");
+            System.out.println("StartX: " + scaledBoxStartX);
+            System.out.println("StartY: " + scaledBoxStartY);
+            System.out.println("EndX: " + scaledBoxEndX);
+            System.out.println("EndY: " + scaledBoxEndY);
+        }
+
+        screenZone = new Rectangle(scaledBoxStartX, scaledBoxStartY,
+            scaledBoxEndX - scaledBoxStartX,
+            scaledBoxEndY - scaledBoxStartY);
+    }
+
+    private ScreenSnipper snipper = null;
+
+    public void openSnipper() throws Exception{
+        if(this.snipper != null){
+            closeSnipper();
+            return;
+        }
+
+        this.snipper = new ScreenSnipper(this, new Window(null));
+    }
+
+    public void closeSnipper(){
+        if(this.snipper != null){
+            this.snipper.setVisible(false);
+            this.snipper.dispose();
+        }
+
+        this.snipper = null;
+
+        if(isWindows()){
+            try{
+                Runtime.getRuntime().exec("LiveCaptions.exe");
+            }catch(IOException e){
+                handleException(e);
+            }
+        }
+    }
+
+    public void setBounds(int startX, int startY, int endX, int endY){
+        if(Math.abs(endX - startX) > 5 && Math.abs(endY - startY) > 5){
+            config.setBoxStartX(startX);
+            config.setBoxStartY(startY);
+            config.setBoxEndX(endX);
+            config.setBoxEndY(endY);
+
+            updateScreenZone();
+            updateConfig();
+        }else{
+            trayIcon.displayMessage("LiveCaptions Logger",
+                "Please select a larger area", TrayIcon.MessageType.INFO);
         }
     }
 
@@ -499,17 +546,19 @@ public class LiveCaptionsLogger{
     }
 
     private void closeLogger(){
-        while(!lastLines.isEmpty()){
-            String oldestEntry = lastLines.remove(0);
+        synchronized(lastLines){
+            while(!lastLines.isEmpty()){
+                String oldestEntry = lastLines.remove(0);
 
-            if(!oldestEntry.equals(lastPrintedLine)){
-                lastPrintedLine = oldestEntry;
-                logToFile(oldestEntry);
+                if(!oldestEntry.equals(lastPrintedLine)){
+                    lastPrintedLine = oldestEntry;
+                    logToFile(oldestEntry);
+                }
             }
-        }
 
-        currentFile = null;
-        lastPrintedLine = "";
+            currentFile = null;
+            lastPrintedLine = "";
+        }
     }
 
     /**
@@ -601,7 +650,7 @@ public class LiveCaptionsLogger{
         }
     }
 
-    private void handleException(Throwable e){
+    public void handleException(Throwable e){
         e.printStackTrace();
 
         if(trayIcon == null){
@@ -612,7 +661,7 @@ public class LiveCaptionsLogger{
             "An error occurred: " + e.getLocalizedMessage(), TrayIcon.MessageType.INFO);
     }
 
-    private static boolean isWindows(){
+    public static boolean isWindows(){
         String osName = System.getProperty("os.name").toLowerCase();
         return osName.contains("windows");
     }
