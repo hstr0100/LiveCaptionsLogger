@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
 import javax.swing.JFileChooser;
@@ -98,6 +99,8 @@ public class LiveCaptionsLogger{
     private ObjectMapper objectMapper = new ObjectMapper();
 
     private ScreenSnipper snipper = null;
+
+    private final AtomicInteger currentTick = new AtomicInteger(0);
 
     public LiveCaptionsLogger(){
         tray = SystemTray.getSystemTray();
@@ -255,16 +258,7 @@ public class LiveCaptionsLogger{
 
             trayIcon.addActionListener((ActionEvent e) -> {
                 try{
-                    File file;
-                    if(config.getOutputPath().isEmpty()){
-                        file = new File(getDocumentsPath(), "LiveCaptions");
-                    }else{
-                        file = new File(config.getOutputPath());
-                    }
-
-                    if(!file.exists()){
-                        file.mkdirs();
-                    }
+                    File file = getOrCreateOutputDirectory();
 
                     Desktop.getDesktop().open(file);
                 }catch(IOException e1){
@@ -308,13 +302,15 @@ public class LiveCaptionsLogger{
                     System.out.println("Tick Tock");
                 }
 
+                int tick = currentTick.incrementAndGet();
+
                 if(!config.isCurrentlyLogging()){
                     return;
                 }
 
                 BufferedImage screenshot = robot.createScreenCapture(screenZone);
 
-                if(config.isDebugMode()){
+                if(config.isDebugMode() && tick % 10 == 0){
                     try{
                         saveImageToPictures(screenshot, "cc_debug.png");
                     }catch(IOException e){
@@ -504,8 +500,8 @@ public class LiveCaptionsLogger{
         }
     }
 
-    private static void saveImageToPictures(BufferedImage image, String fileName) throws IOException{
-        String picturesDirectoryPath = System.getProperty("user.home") + "/Pictures";
+    private void saveImageToPictures(BufferedImage image, String fileName) throws IOException{
+        String picturesDirectoryPath = getPicturesPath();
 
         File picturesDirectory = new File(picturesDirectoryPath);
         if(!picturesDirectory.exists()){
@@ -694,16 +690,7 @@ public class LiveCaptionsLogger{
         if(currentFile == null){
             Calendar now = Calendar.getInstance();
 
-            File file;
-            if(config.getOutputPath().isEmpty()){
-                file = new File(getDocumentsPath(), "LiveCaptions");
-            }else{
-                file = new File(config.getOutputPath());
-            }
-
-            if(!file.exists()){
-                file.mkdirs();
-            }
+            File file = getOrCreateOutputDirectory();
 
             currentFile = new File(file, "LiveCaptions_" + FORMATTER.format(now.getTime()) + ".txt");
         }
@@ -714,6 +701,32 @@ public class LiveCaptionsLogger{
             pw.println(line);
         }catch(IOException e){//Shenanigans happened
             handleException(e);
+        }
+    }
+
+    private File getOrCreateOutputDirectory(){
+        File file;
+        if(!config.getOutputPath().isEmpty()){
+            file = new File(config.getOutputPath());
+        }else{
+            file = new File(getDocumentsPath(), "LiveCaptions");
+        }
+
+        if(!file.exists()){
+            file.mkdirs();
+        }
+
+        return file;
+    }
+
+    /**
+     * Path for the debugging images if debugMode = true
+     */
+    private String getPicturesPath(){
+        if(isWindows()){
+            return System.getProperty("user.home") + "\\Pictures";
+        }else{
+            return System.getProperty("user.home") + "/Pictures";
         }
     }
 
