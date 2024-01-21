@@ -597,6 +597,9 @@ public class LiveCaptionsLogger{
 
     /**
      * Ignore capturing if we aren't seeing the caption box
+     *
+     * This method checks if all four corners of the selected
+     * screen area are black
      */
     private boolean inCaptionBox(BufferedImage image){
         List<Integer> corners = Arrays.asList(
