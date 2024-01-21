@@ -100,11 +100,9 @@ public class ScreenSnipper extends Window{
                 (int)(startY / scalingFactor),
                 (int)(endX / scalingFactor),
                 (int)(endY / scalingFactor));
-        }catch(Exception e){
-            main.handleException(e);
+        }finally{
+            main.closeSnipper();
         }
-
-        main.closeSnipper();
     }
 
     private void drawTextOnImage(BufferedImage image, String text){
