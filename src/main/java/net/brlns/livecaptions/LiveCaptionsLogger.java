@@ -93,6 +93,8 @@ public class LiveCaptionsLogger{
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
+    private ScreenSnipper snipper = null;
+
     public LiveCaptionsLogger(){
         tray = SystemTray.getSystemTray();
 
@@ -215,7 +217,14 @@ public class LiveCaptionsLogger{
                 MenuItem menuItem = new MenuItem("Exit");
                 menuItem.addActionListener((ActionEvent e) -> {
                     System.out.println("Exiting....");
-                    System.exit(0);
+
+                    try{
+                        closeLogger();
+                    }catch(Exception e1){
+                        handleException(e1);
+                    }finally{
+                        System.exit(0);
+                    }
                 });
 
                 popup.add(menuItem);
@@ -414,8 +423,6 @@ public class LiveCaptionsLogger{
             scaledBoxEndX - scaledBoxStartX,
             scaledBoxEndY - scaledBoxStartY);
     }
-
-    private ScreenSnipper snipper = null;
 
     public void openSnipper() throws Exception{
         if(this.snipper != null){
