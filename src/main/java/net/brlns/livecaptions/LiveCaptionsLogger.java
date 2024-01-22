@@ -38,7 +38,7 @@ public class LiveCaptionsLogger{
     /**
      * Configs
      *
-     * Only tested at 1080p
+     * Ships with default config for 1080p
      */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -67,6 +67,14 @@ public class LiveCaptionsLogger{
         public boolean debugMode = false;
         @JsonProperty("LogAtStartup")
         public boolean currentlyLogging = true;
+
+        /**
+         * should be a value between 0-255
+         * 255 is the same as CaptureAnyText = true
+         * 30 makes sure only gray~black caption boxes will work with this program
+         */
+        @JsonProperty("CaptionWindowDetectColorThreshold")
+        public int captionWindowColorThreshold = 30;
 
         /**
          * If you need to use languages other than English,
@@ -295,10 +303,6 @@ public class LiveCaptionsLogger{
             Robot robot = new Robot();
 
             updateScreenZone();
-
-            if(config.isDebugMode()){
-                System.out.println("Updated screen bounds");
-            }
 
             File tessDataFolder;
             if(config.getCustomTessDataPath().isEmpty()){
@@ -766,7 +770,9 @@ public class LiveCaptionsLogger{
                 System.out.println(red + ":" + green + ":" + blue);
             }
 
-            return red <= 30 && green <= 30 && blue <= 30;//All mostly black! seems to vary a bit. This has to be tweaked if not black & white
+            int threshold = config.getCaptionWindowColorThreshold();
+
+            return red <= threshold && green <= threshold && blue <= threshold;//All mostly black! seems to vary a bit. This has to be tweaked if not black & white
         });
     }
 
