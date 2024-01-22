@@ -89,17 +89,8 @@ public class ScreenSnipper extends Window{
     }
 
     private void setupZone(int startX, int startY, int endX, int endY){
-        Toolkit toolkit = Toolkit.getDefaultToolkit();
-
-        int screenResolution = toolkit.getScreenResolution();
-        double scalingFactor = 96.0 / screenResolution;
-
         try{
-            main.setBounds(
-                (int)(startX / scalingFactor),
-                (int)(startY / scalingFactor),
-                (int)(endX / scalingFactor),
-                (int)(endY / scalingFactor));
+            main.setBounds(startX, startY, endX, endY);
         }finally{
             main.closeSnipper();
         }
