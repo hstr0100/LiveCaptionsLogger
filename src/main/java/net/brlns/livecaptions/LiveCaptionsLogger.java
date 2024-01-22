@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.*;
 import java.awt.color.ColorSpace;
 import java.awt.event.ActionEvent;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorConvertOp;
 import java.io.File;
@@ -60,6 +61,8 @@ public class LiveCaptionsLogger{
 
         @JsonProperty("ContrastMode")
         public boolean contrastMode = false;
+        @JsonProperty("CaptureAnyText")
+        public boolean captureAnyText = false;
         @JsonProperty("DebugMode")
         public boolean debugMode = false;
         @JsonProperty("LogAtStartup")
@@ -103,8 +106,6 @@ public class LiveCaptionsLogger{
     private final AtomicInteger currentTick = new AtomicInteger(0);
 
     public LiveCaptionsLogger(){
-        tray = SystemTray.getSystemTray();
-
         if(!configFile.exists()){
             try{
                 objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, new Config());
@@ -121,6 +122,12 @@ public class LiveCaptionsLogger{
 
             handleException(e);
         }
+
+        if(config.isDebugMode()){
+            System.out.println("Loaded config file");
+        }
+
+        tray = SystemTray.getSystemTray();
 
         try{
             PopupMenu popup = new PopupMenu();
@@ -158,6 +165,23 @@ public class LiveCaptionsLogger{
                     }
 
                     trayIcon.displayMessage(REGISTRY_APP_NAME, "Contrast mode is now " + (config.isContrastMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+                });
+
+                popup.add(menuItem);
+            }
+
+            {
+                MenuItem menuItem = new MenuItem("Toggle Logging Any Text");
+                menuItem.addActionListener((ActionEvent e) -> {
+                    config.setCaptureAnyText(!config.isCaptureAnyText());
+
+                    updateConfig();
+
+                    if(trayIcon == null){
+                        throw new RuntimeException("This wasn't supposed to run yet");
+                    }
+
+                    trayIcon.displayMessage(REGISTRY_APP_NAME, "Logging of any text within the capture window is now " + (config.isCaptureAnyText() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                 });
 
                 popup.add(menuItem);
@@ -268,16 +292,13 @@ public class LiveCaptionsLogger{
 
             tray.add(trayIcon);
 
-            GraphicsDevice screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice();
-            Robot robot = new Robot(screen);
-
-            Rectangle screenBounds = screen.getDefaultConfiguration().getBounds();
-
-            if(config.isDebugMode()){
-                System.out.println("Screen bounds: " + screenBounds);
-            }
+            Robot robot = new Robot();
 
             updateScreenZone();
+
+            if(config.isDebugMode()){
+                System.out.println("Updated screen bounds");
+            }
 
             File tessDataFolder;
             if(config.getCustomTessDataPath().isEmpty()){
@@ -295,24 +316,39 @@ public class LiveCaptionsLogger{
             tesseract.setDatapath(tessDataFolder.getAbsolutePath());
             tesseract.setLanguage(config.getTessLanguage());
 
+            if(config.isDebugMode()){
+                System.out.println("Tesseract initialized");
+            }
+
             JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
 
             Runnable captureAndProcess = () -> {
-                if(config.isDebugMode()){
-                    System.out.println("Tick Tock");
-                }
-
                 int tick = currentTick.incrementAndGet();
 
+                if(config.isDebugMode()){
+                    System.out.println("Tick #" + tick);
+                }
+
                 if(!config.isCurrentlyLogging()){
+                    System.out.println("Logging is off");
                     return;
+                }
+
+                if(config.isDebugMode()){
+                    System.out.println("Start capture at " + screenZone);
                 }
 
                 BufferedImage screenshot = robot.createScreenCapture(screenZone);
 
+                if(config.isDebugMode()){
+                    System.out.println("Captured");
+                }
+
                 if(config.isDebugMode() && tick % 10 == 0){
                     try{
                         saveDebugImage(screenshot, "cc_debug.png");
+
+                        System.out.println("Saved debug image");
                     }catch(IOException e){
                         handleException(e);
                     }
@@ -438,21 +474,26 @@ public class LiveCaptionsLogger{
     }
 
     private void updateScreenZone(){
-        Toolkit toolkit = Toolkit.getDefaultToolkit();
-
-        int screenResolution = toolkit.getScreenResolution();
-        double scalingFactor = 96.0 / screenResolution;
+        AffineTransform transform = getGraphicsTransformAt(config.getBoxStartX(), config.getBoxStartY());
+        double scaleX = transform.getScaleX();
+        double scaleY = transform.getScaleY();
 
         if(config.isDebugMode()){
-            System.out.println("Scaling Factor: " + scalingFactor);
+            System.out.println("Scaling Factor 1: " + "X " + scaleX + " Y " + scaleY);
         }
 
-        int scaledBoxStartX = (int)(config.getBoxStartX() * scalingFactor);
-        int scaledBoxStartY = (int)(config.getBoxStartY() * scalingFactor);
-        int scaledBoxEndX = (int)(config.getBoxEndX() * scalingFactor);
-        int scaledBoxEndY = (int)(config.getBoxEndY() * scalingFactor);
+        int scaledBoxStartX = (int)(config.getBoxStartX() / scaleX);
+        int scaledBoxStartY = (int)(config.getBoxStartY() / scaleY);
+        int scaledBoxEndX = (int)(config.getBoxEndX() / scaleX);
+        int scaledBoxEndY = (int)(config.getBoxEndY() / scaleY);
 
         if(config.isDebugMode()){
+            System.out.println("Real Rectangle Coordinates:");
+            System.out.println("StartX: " + config.getBoxStartX());
+            System.out.println("StartY: " + config.getBoxStartY());
+            System.out.println("EndX: " + config.getBoxEndX());
+            System.out.println("EndY: " + config.getBoxEndY());
+
             System.out.println("Scaled Rectangle Coordinates:");
             System.out.println("StartX: " + scaledBoxStartX);
             System.out.println("StartY: " + scaledBoxStartY);
@@ -463,6 +504,66 @@ public class LiveCaptionsLogger{
         screenZone = new Rectangle(scaledBoxStartX, scaledBoxStartY,
             scaledBoxEndX - scaledBoxStartX,
             scaledBoxEndY - scaledBoxStartY);
+    }
+
+    public void setBounds(int startX, int startY, int endX, int endY){
+        AffineTransform transform = getGraphicsTransformAt(config.getBoxStartX(), config.getBoxStartY());
+        double scaleX = transform.getScaleX();
+        double scaleY = transform.getScaleY();
+
+        int scaledStartX = (int)(startX * scaleX);
+        int scaledStartY = (int)(startY * scaleY);
+        int scaledEndX = (int)(endX * scaleX);
+        int scaledEndY = (int)(endY * scaleY);
+
+        if(config.isDebugMode()){
+            System.out.println("Scaling Factor 2: " + "X " + scaleX + " Y " + scaleY);
+
+            System.out.println("Provided Rectangle Coordinates:");
+            System.out.println("StartX: " + startX);
+            System.out.println("StartY: " + startY);
+            System.out.println("EndX: " + endX);
+            System.out.println("EndY: " + endY);
+
+            System.out.println("Provided Scaled Rectangle Coordinates:");
+            System.out.println("StartX: " + scaledStartX);
+            System.out.println("StartY: " + scaledStartY);
+            System.out.println("EndX: " + scaledEndX);
+            System.out.println("EndY: " + scaledEndY);
+        }
+
+        if(Math.abs(scaledEndX - scaledStartX) > 5 && Math.abs(scaledEndY - scaledStartY) > 5){
+            config.setBoxStartX(scaledStartX);
+            config.setBoxStartY(scaledStartY);
+            config.setBoxEndX(scaledEndX);
+            config.setBoxEndY(scaledEndY);
+
+            updateScreenZone();
+            updateConfig();
+        }else{
+            trayIcon.displayMessage(REGISTRY_APP_NAME,
+                "Please select a larger area", TrayIcon.MessageType.INFO);
+        }
+    }
+
+    public AffineTransform getGraphicsTransformAt(int x, int y){
+        GraphicsEnvironment environment = GraphicsEnvironment.getLocalGraphicsEnvironment();
+
+        GraphicsDevice device = null;
+        for(GraphicsDevice gd : environment.getScreenDevices()){
+            if(gd.getDefaultConfiguration().getBounds().contains(x, y)){
+                device = gd;
+            }
+        }
+
+        if(device == null){
+            device = environment.getDefaultScreenDevice();
+        }
+
+        GraphicsConfiguration graphicsConfig = device.getDefaultConfiguration();
+        AffineTransform tx = graphicsConfig.getDefaultTransform();
+
+        return tx;
     }
 
     public void openSnipper() throws Exception{
@@ -483,21 +584,6 @@ public class LiveCaptionsLogger{
         this.snipper = null;
 
         startLiveCaptions();
-    }
-
-    public void setBounds(int startX, int startY, int endX, int endY){
-        if(Math.abs(endX - startX) > 5 && Math.abs(endY - startY) > 5){
-            config.setBoxStartX(startX);
-            config.setBoxStartY(startY);
-            config.setBoxEndX(endX);
-            config.setBoxEndY(endY);
-
-            updateScreenZone();
-            updateConfig();
-        }else{
-            trayIcon.displayMessage(REGISTRY_APP_NAME,
-                "Please select a larger area", TrayIcon.MessageType.INFO);
-        }
     }
 
     /**
@@ -564,7 +650,8 @@ public class LiveCaptionsLogger{
                 String jarPath = new File(LiveCaptionsLogger.class.getProtectionDomain().getCodeSource().getLocation()
                     .toURI()).getPath();
 
-                //String launchString = "javaw -Xmx256M -jar \"" + jarPath + "\"";//TODO: debug why windows dislikes this
+                //The PATH does not seem to be evaluated at this stage
+                //String launchString = "start /b javaw -Xmx256M -jar \\\"" + jarPath + "\\\"";
                 String launchString = jarPath;
                 launchString = launchString.replace("target\\LiveCaptionsLogger.jar", "start.bat");
                 launchString = launchString.replace("target/LiveCaptionsLogger.jar", "start.bat");
@@ -574,20 +661,16 @@ public class LiveCaptionsLogger{
                     System.out.println(launchString);
                 }
 
-//				ProcessBuilder createBuilder = new ProcessBuilder(
-//					"reg", "add",
-//					"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-//					"/v", REGISTRY_APP_NAME,
-//					"/t", "REG_SZ",
-//					"/d", "\"" + launchString + "\"",
-//					"/f"
-//				);
-                //Java seems to strip the double quotes from around the launch string,
-                String command = "reg add \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v "
-                    + REGISTRY_APP_NAME + " /t REG_SZ /d \"" + launchString + "\" /f";
+                ProcessBuilder createBuilder = new ProcessBuilder(
+                    "reg", "add",
+                    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "/v", REGISTRY_APP_NAME,
+                    "/t", "REG_SZ",
+                    "/d", "\\\"" + launchString + "\\\"",
+                    "/f"
+                );
 
-                Process process = Runtime.getRuntime().exec(command);
-
+                Process process = createBuilder.start();
                 int exitCode = process.waitFor();
 
                 if(config.isDebugMode()){
@@ -663,6 +746,10 @@ public class LiveCaptionsLogger{
      * screen area are black
      */
     private boolean inCaptionBox(BufferedImage image){
+        if(config.isCaptureAnyText()){//Results might not be the best, toggle contrast mode on and do NOT select the whole screen unless you have a really good CPU
+            return true;
+        }
+
         List<Integer> corners = Arrays.asList(
             image.getRGB(0, 0),
             image.getRGB(image.getWidth() - 1, 0),
@@ -744,11 +831,16 @@ public class LiveCaptionsLogger{
 
     public static void main(String[] args){
         if(SystemTray.isSupported()){
-            System.out.println("Starting");
+            System.out.println("Starting...");
             LiveCaptionsLogger instance = new LiveCaptionsLogger();
+            System.out.println("Started");
 
             Thread.setDefaultUncaughtExceptionHandler((Thread t, Throwable e) -> {
-                instance.handleException(e);
+                try{
+                    instance.handleException(e);
+                }catch(Exception e1){//Just in case the irony pays off
+                    e1.printStackTrace();
+                }
             });
         }else{
             System.err.println("System tray not supported???? did you run this on a calculator?");

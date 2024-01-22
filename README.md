@@ -19,7 +19,7 @@ You need to have Java 11 or newer to run this program, we recommend installing t
 For Windows 11, scroll down and select the x64 JRE .msi, download and install it
 
 Then, clone or download this repository (Github > Code > Download ZIP).\
-Copy or extract the contents to any directory you'd like this program to run from, we recommend you choose a path without spaces to avoid issues.\
+Copy or extract the contents to any directory you'd like this program to run from.\
 We already provide a pre-compiled JAR of the program, so now you can just run the 'start.bat' script to start the program.
 
 Right click the tray icon to setup auto start or toggle transcriptions on and off.
