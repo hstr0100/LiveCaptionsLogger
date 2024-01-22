@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 /**
- * Configs
+ * Program Settings
  *
  * Ships with default settings for 1080p
  * If you have a different resolution make sure
@@ -13,7 +13,7 @@ import lombok.Data;
  */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Config{
+public class Settings{
 
     @JsonProperty("PixelStartX")
     public int boxStartX = 15;
@@ -25,8 +25,6 @@ public class Config{
     @JsonProperty("PixelEndY")
     public int boxEndY = 103;
 
-    @JsonProperty("TesseractLanguage")
-    public String tessLanguage = "eng";
     @JsonProperty("OutputPath")
     public String outputPath = "";
 
@@ -55,5 +53,7 @@ public class Config{
      */
     @JsonProperty("CustomTessDataPath")
     public String customTessDataPath = "";
+    @JsonProperty("TesseractLanguage")
+    public String tessLanguage = "eng";
 
 }
