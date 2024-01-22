@@ -38,6 +38,16 @@ public class Settings{
     public boolean currentlyLogging = true;
 
     /**
+     * If the lines being generated are very short, we may not be able
+     * to capture it in time, if you run into this problem and has CPU power
+     * to spare, lower this value, 500ms (half a second) should be plenty
+     *
+     * Accepted range 50ms ~ 2500ms
+     */
+    @JsonProperty("CaptureRateMs")
+    public int captureRateMs = 1000;
+
+    /**
      * should be a value between 0-255
      * 255 is the same as CaptureAnyText = true
      * 30 makes sure only gray~black caption boxes will work with this program
