@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
 import javax.swing.JFileChooser;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.filechooser.FileSystemView;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
@@ -118,7 +120,7 @@ public class LiveCaptionsLogger{
             }
 
             {
-                MenuItem menuItem = new MenuItem("Toggle Logging Any Text");
+                MenuItem menuItem = new MenuItem("Toggle Logging of Any Text");
                 menuItem.addActionListener((ActionEvent e) -> {
                     config.setCaptureAnyText(!config.isCaptureAnyText());
 
@@ -410,16 +412,14 @@ public class LiveCaptionsLogger{
         double scaleX = transform.getScaleX();
         double scaleY = transform.getScaleY();
 
-        if(config.isDebugMode()){
-            System.out.println("Scaling Factor 1: " + "X " + scaleX + " Y " + scaleY);
-        }
-
         int scaledBoxStartX = (int)(config.getBoxStartX() / scaleX);
         int scaledBoxStartY = (int)(config.getBoxStartY() / scaleY);
         int scaledBoxEndX = (int)(config.getBoxEndX() / scaleX);
         int scaledBoxEndY = (int)(config.getBoxEndY() / scaleY);
 
         if(config.isDebugMode()){
+            System.out.println("Scaling Factor 1: " + "X " + scaleX + " Y " + scaleY);
+
             System.out.println("Real Rectangle Coordinates:");
             System.out.println("StartX: " + config.getBoxStartX());
             System.out.println("StartY: " + config.getBoxStartY());
@@ -675,7 +675,7 @@ public class LiveCaptionsLogger{
      * Ignore capturing if we aren't seeing the caption box
      *
      * This method checks if all four corners of the selected
-     * screen area are black
+     * screen area are darker than the set RGB threshold
      */
     private boolean inCaptionBox(BufferedImage image){
         if(config.isCaptureAnyText()){//Results might not be the best, toggle contrast mode on and do NOT select the whole screen unless you have a really good CPU
@@ -766,6 +766,13 @@ public class LiveCaptionsLogger{
     public static void main(String[] args){
         if(SystemTray.isSupported()){
             System.out.println("Starting...");
+
+            try{
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            }catch(Exception e){
+                //Default to Java's look and feel
+            }
+
             LiveCaptionsLogger instance = new LiveCaptionsLogger();
             System.out.println("Started");
 
