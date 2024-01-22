@@ -16,26 +16,26 @@ import lombok.Data;
 public class Settings{
 
     @JsonProperty("PixelStartX")
-    public int boxStartX = 15;
+    private int boxStartX = 15;
     @JsonProperty("PixelStartY")
-    public int boxStartY = 15;
+    private int boxStartY = 15;
 
     @JsonProperty("PixelEndX")
-    public int boxEndX = 1795;
+    private int boxEndX = 1795;
     @JsonProperty("PixelEndY")
-    public int boxEndY = 103;
+    private int boxEndY = 103;
 
     @JsonProperty("OutputPath")
-    public String outputPath = "";
+    private String outputPath = "";
 
     @JsonProperty("ContrastMode")
-    public boolean contrastMode = false;
+    private boolean contrastMode = false;
     @JsonProperty("CaptureAnyText")
-    public boolean captureAnyText = false;
+    private boolean captureAnyText = false;
     @JsonProperty("DebugMode")
-    public boolean debugMode = false;
+    private boolean debugMode = false;
     @JsonProperty("LogAtStartup")
-    public boolean currentlyLogging = true;
+    private boolean currentlyLogging = true;
 
     /**
      * If the lines being generated are very short, we may not be able
@@ -45,7 +45,7 @@ public class Settings{
      * Accepted range 50ms ~ 2500ms
      */
     @JsonProperty("CaptureRateMs")
-    public int captureRateMs = 1000;
+    private int captureRateMs = 1000;
 
     /**
      * should be a value between 0-255
@@ -54,7 +54,7 @@ public class Settings{
      * this value is checked against the RGB components of the pixels around the four corners
      */
     @JsonProperty("CaptionWindowDetectColorThreshold")
-    public int captionWindowColorThreshold = 30;
+    private int captionWindowColorThreshold = 30;
 
     /**
      * If you need to use languages other than English,
@@ -62,8 +62,12 @@ public class Settings{
      * Typically that would be C:\Program Files\Tesseract-OCR\tessdata
      */
     @JsonProperty("CustomTessDataPath")
-    public String customTessDataPath = "";
+    private String customTessDataPath = "";
+
+    /**
+     * https://tesseract-ocr.github.io/tessdoc/Data-Files#data-files-for-version-400-november-29-2016
+     */
     @JsonProperty("TesseractLanguage")
-    public String tessLanguage = "eng";
+    private String tessLanguage = "eng";
 
 }

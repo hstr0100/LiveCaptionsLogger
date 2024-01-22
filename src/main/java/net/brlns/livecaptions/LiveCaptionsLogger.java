@@ -354,6 +354,7 @@ public class LiveCaptionsLogger{
                                     lastLines.addAll(Arrays.asList(lines));
                                 }
                             }catch(TesseractException e){
+                                //Seems safe to just ignore
                                 e.printStackTrace();
                             }
                         });
