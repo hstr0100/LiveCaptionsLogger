@@ -51,7 +51,7 @@ public class LiveCaptionsLogger{
     private Rectangle screenZone;
 
     private File configFile = new File("config.json");
-    private Config config;
+    private Settings config;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -62,16 +62,16 @@ public class LiveCaptionsLogger{
     public LiveCaptionsLogger(){
         if(!configFile.exists()){
             try{
-                objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, new Config());
+                objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, new Settings());
             }catch(IOException e){
                 handleException(e);
             }
         }
 
         try{
-            config = objectMapper.readValue(configFile, Config.class);
+            config = objectMapper.readValue(configFile, Settings.class);
         }catch(IOException e){
-            config = new Config();
+            config = new Settings();
             updateConfig();
 
             handleException(e);
