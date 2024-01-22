@@ -1,7 +1,5 @@
 package net.brlns.livecaptions;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.*;
 import java.awt.color.ColorSpace;
@@ -27,64 +25,12 @@ import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
 import javax.swing.JFileChooser;
 import javax.swing.filechooser.FileSystemView;
-import lombok.Data;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import net.sourceforge.tess4j.util.LoadLibs;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 
 public class LiveCaptionsLogger{
-
-    /**
-     * Configs
-     *
-     * Ships with default config for 1080p
-     */
-    @Data
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Config{
-
-        @JsonProperty("PixelStartX")
-        public int boxStartX = 15;
-        @JsonProperty("PixelStartY")
-        public int boxStartY = 15;
-
-        @JsonProperty("PixelEndX")
-        public int boxEndX = 1795;
-        @JsonProperty("PixelEndY")
-        public int boxEndY = 103;
-
-        @JsonProperty("TesseractLanguage")
-        public String tessLanguage = "eng";
-        @JsonProperty("OutputPath")
-        public String outputPath = "";
-
-        @JsonProperty("ContrastMode")
-        public boolean contrastMode = false;
-        @JsonProperty("CaptureAnyText")
-        public boolean captureAnyText = false;
-        @JsonProperty("DebugMode")
-        public boolean debugMode = false;
-        @JsonProperty("LogAtStartup")
-        public boolean currentlyLogging = true;
-
-        /**
-         * should be a value between 0-255
-         * 255 is the same as CaptureAnyText = true
-         * 30 makes sure only gray~black caption boxes will work with this program
-         */
-        @JsonProperty("CaptionWindowDetectColorThreshold")
-        public int captionWindowColorThreshold = 30;
-
-        /**
-         * If you need to use languages other than English,
-         * download tesseract from https://github.com/UB-Mannheim/tesseract/wiki and point this to your own tessdata folder,
-         * Typically that would be C:\Program Files\Tesseract-OCR\tessdata
-         */
-        @JsonProperty("CustomTessDataPath")
-        public String customTessDataPath = "";
-
-    }
 
     /**
      * Constants and application states
@@ -138,6 +84,7 @@ public class LiveCaptionsLogger{
         tray = SystemTray.getSystemTray();
 
         try{
+            //TODO: move this to its own class, migrate to JPopupMenu to add mouse over tooltips
             PopupMenu popup = new PopupMenu();
 
             {
@@ -150,10 +97,6 @@ public class LiveCaptionsLogger{
                     }
 
                     updateConfig();
-
-                    if(trayIcon == null){
-                        throw new RuntimeException("This wasn't supposed to run yet");
-                    }
 
                     trayIcon.displayMessage(REGISTRY_APP_NAME, "Live caption logging is now " + (config.isCurrentlyLogging() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                 });
@@ -168,10 +111,6 @@ public class LiveCaptionsLogger{
 
                     updateConfig();
 
-                    if(trayIcon == null){
-                        throw new RuntimeException("This wasn't supposed to run yet");
-                    }
-
                     trayIcon.displayMessage(REGISTRY_APP_NAME, "Contrast mode is now " + (config.isContrastMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                 });
 
@@ -185,10 +124,6 @@ public class LiveCaptionsLogger{
 
                     updateConfig();
 
-                    if(trayIcon == null){
-                        throw new RuntimeException("This wasn't supposed to run yet");
-                    }
-
                     trayIcon.displayMessage(REGISTRY_APP_NAME, "Logging of any text within the capture window is now " + (config.isCaptureAnyText() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                 });
 
@@ -200,9 +135,6 @@ public class LiveCaptionsLogger{
                 menuItem.addActionListener((ActionEvent e) -> {
                     try{
                         boolean result = checkStartupStatusAndToggle();
-                        if(trayIcon == null){
-                            throw new RuntimeException("This wasn't supposed to run yet");
-                        }
 
                         trayIcon.displayMessage(REGISTRY_APP_NAME, "Application auto start is now " + (result ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                     }catch(Exception e1){
@@ -219,10 +151,6 @@ public class LiveCaptionsLogger{
                     config.setDebugMode(!config.isDebugMode());
 
                     updateConfig();
-
-                    if(trayIcon == null){
-                        throw new RuntimeException("This wasn't supposed to run yet");
-                    }
 
                     trayIcon.displayMessage(REGISTRY_APP_NAME, "Debug mode is now " + (config.isDebugMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
                 });
