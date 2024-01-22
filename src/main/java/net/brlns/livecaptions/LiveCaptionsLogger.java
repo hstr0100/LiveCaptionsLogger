@@ -25,7 +25,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
 import javax.swing.JFileChooser;
 import javax.swing.UIManager;
-import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.filechooser.FileSystemView;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
@@ -379,7 +378,10 @@ public class LiveCaptionsLogger{
             };
 
             ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-            scheduler.scheduleAtFixedRate(captureAndProcess, 0, 1000, TimeUnit.MILLISECONDS);//1 Second? seems ok
+
+            int clampedRateMs = clamp(config.getCaptureRateMs(), 50, 2500);
+
+            scheduler.scheduleAtFixedRate(captureAndProcess, 0, clampedRateMs, TimeUnit.MILLISECONDS);//1 Second? seems ok
         }catch(Exception e){
             handleException(e);
         }
@@ -756,6 +758,13 @@ public class LiveCaptionsLogger{
 
         trayIcon.displayMessage(REGISTRY_APP_NAME,
             "An error occurred: " + e.getLocalizedMessage(), TrayIcon.MessageType.INFO);
+    }
+
+    /**
+     * In Java 21 we finally don't need to bring this method to every program we build
+     */
+    public static int clamp(int value, int min, int max){
+        return Math.max(min, Math.min(value, max));
     }
 
     public static boolean isWindows(){
