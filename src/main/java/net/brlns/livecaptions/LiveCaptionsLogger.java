@@ -825,9 +825,13 @@ public class LiveCaptionsLogger{
     }
 
     /**
-     * This program should also work in other platforms if you are trying to
-     * capture something other than Windows 11's LiveCaptions, we use this
-     * to filter out the windows-only features from other platforms.
+     * Checks if the current platform is Windows.
+     *
+     * This is used to filter out Windows-specific features when
+     * running the program on other platforms.
+     *
+     * This program can run in other OSs for capturing captions other than
+     * Windows 11's LiveCaptions, such as Youtube's.
      */
     public static boolean isWindows(){
         String osName = System.getProperty("os.name").toLowerCase();
