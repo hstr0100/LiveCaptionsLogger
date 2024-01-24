@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.*;
 import java.awt.color.ColorSpace;
 import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorConvertOp;
@@ -26,11 +27,18 @@ import javax.imageio.ImageIO;
 import javax.swing.JFileChooser;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileSystemView;
+import lombok.extern.slf4j.Slf4j;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import net.sourceforge.tess4j.util.LoadLibs;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 
+/**
+ * LiveCaptionsLogger
+ *
+ * @author Gabriel / hstr0100
+ */
+@Slf4j
 public class LiveCaptionsLogger{
 
     /**
@@ -61,12 +69,9 @@ public class LiveCaptionsLogger{
     private final AtomicInteger currentTick = new AtomicInteger(0);
 
     public LiveCaptionsLogger(){
+        //Initialize the config file
         if(!configFile.exists()){
-            try{
-                objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, new Settings());
-            }catch(IOException e){
-                handleException(e);
-            }
+            updateConfig(new Settings());
         }
 
         try{
@@ -79,142 +84,18 @@ public class LiveCaptionsLogger{
         }
 
         if(config.isDebugMode()){
-            System.out.println("Loaded config file");
+            //Slf4j in particular does not allow switching log level during runtime
+            //Here we'd like to have the option to toggle it on the fly
+            //Hence why this is not using not log.debug
+            log.info("Loaded config file");
         }
 
         tray = SystemTray.getSystemTray();
 
         try{
-            //TODO: move this to its own class, migrate to JPopupMenu to add mouse over tooltips
-            PopupMenu popup = new PopupMenu();
-
-            {
-                MenuItem menuItem = new MenuItem("Toggle LiveCaptions Logging");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    config.setCurrentlyLogging(!config.isCurrentlyLogging());
-
-                    if(!config.isCurrentlyLogging()){
-                        closeLogger();
-                    }
-
-                    updateConfig();
-
-                    trayIcon.displayMessage(REGISTRY_APP_NAME, "Live caption logging is now " + (config.isCurrentlyLogging() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
-                });
-
-                popup.add(menuItem);
-            }
-
-            {//In case the text is NOT black and white you might need to toggle this
-                MenuItem menuItem = new MenuItem("Toggle Contrast Mode");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    config.setContrastMode(!config.isContrastMode());
-
-                    updateConfig();
-
-                    trayIcon.displayMessage(REGISTRY_APP_NAME, "Contrast mode is now " + (config.isContrastMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
-                });
-
-                popup.add(menuItem);
-            }
-
-            {
-                MenuItem menuItem = new MenuItem("Toggle Logging of Any Text");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    config.setCaptureAnyText(!config.isCaptureAnyText());
-
-                    updateConfig();
-
-                    trayIcon.displayMessage(REGISTRY_APP_NAME, "Logging of any text within the capture window is now " + (config.isCaptureAnyText() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
-                });
-
-                popup.add(menuItem);
-            }
-
-            if(isWindows()){
-                MenuItem menuItem = new MenuItem("Toggle Auto Start");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    try{
-                        boolean result = checkStartupStatusAndToggle();
-
-                        trayIcon.displayMessage(REGISTRY_APP_NAME, "Application auto start is now " + (result ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
-                    }catch(Exception e1){
-                        handleException(e1);
-                    }
-                });
-
-                popup.add(menuItem);
-            }
-
-            {//Debug output is displayed in the console when the program is started via cmd
-                MenuItem menuItem = new MenuItem("Toggle Debug Mode");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    config.setDebugMode(!config.isDebugMode());
-
-                    updateConfig();
-
-                    trayIcon.displayMessage(REGISTRY_APP_NAME, "Debug mode is now " + (config.isDebugMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
-                });
-
-                popup.add(menuItem);
-            }
-
-            {
-                MenuItem menuItem = new MenuItem("Configure Captions Area");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    try{
-                        this.openSnipper();
-                    }catch(Exception e1){
-                        handleException(e1);
-                    }
-                });
-
-                popup.add(menuItem);
-            }
-
-            {
-                MenuItem menuItem = new MenuItem("Configure Output Folder");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    try{
-                        this.openDirectoryPicker();
-                    }catch(Exception e1){
-                        handleException(e1);
-                    }
-                });
-
-                popup.add(menuItem);
-            }
-
-            {
-                MenuItem menuItem = new MenuItem("Start Live Captions");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    startLiveCaptions();
-                });
-
-                popup.add(menuItem);
-            }
-
-            {
-                MenuItem menuItem = new MenuItem("Exit");
-                menuItem.addActionListener((ActionEvent e) -> {
-                    System.out.println("Exiting....");
-
-                    try{
-                        closeLogger();
-                    }catch(Exception e1){
-                        handleException(e1);
-                    }finally{
-                        System.exit(0);
-                    }
-                });
-
-                popup.add(menuItem);
-            }
-
             //Register to the system tray
             Image image = Toolkit.getDefaultToolkit().createImage(this.getClass().getResource("/assets/tray_icon.png"));
-            trayIcon = new TrayIcon(image, "CC", popup);
-            trayIcon.setToolTip(REGISTRY_APP_NAME);
+            trayIcon = new TrayIcon(image, REGISTRY_APP_NAME, buildPopupMenu());
             trayIcon.setImageAutoSize(true);
 
             trayIcon.addActionListener((ActionEvent e) -> {
@@ -229,10 +110,13 @@ public class LiveCaptionsLogger{
 
             tray.add(trayIcon);
 
-            Robot robot = new Robot();
-
+            //Initialize the capture area bounds
             updateScreenZone();
 
+            //Initialize the capture tool for Tesseract
+            Robot robot = new Robot();
+
+            //Initialize Tesseract
             File tessDataFolder;
             if(config.getCustomTessDataPath().isEmpty()){
                 tessDataFolder = LoadLibs.extractTessResources("tessdata");
@@ -250,38 +134,35 @@ public class LiveCaptionsLogger{
             tesseract.setLanguage(config.getTessLanguage());
 
             if(config.isDebugMode()){
-                System.out.println("Tesseract initialized");
+                log.info("Tesseract initialized");
             }
 
+            //Initialize the string comparison tool
             JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
 
             Runnable captureAndProcess = () -> {
                 int tick = currentTick.incrementAndGet();
 
                 if(config.isDebugMode()){
-                    System.out.println("Tick #" + tick);
+                    log.info("Tick #" + tick);
                 }
 
                 if(!config.isCurrentlyLogging()){
-                    System.out.println("Logging is off");
+                    log.info("Logging is off");
                     return;
-                }
-
-                if(config.isDebugMode()){
-                    System.out.println("Start capture at " + screenZone);
                 }
 
                 BufferedImage screenshot = robot.createScreenCapture(screenZone);
 
                 if(config.isDebugMode()){
-                    System.out.println("Captured");
+                    log.info("Captured at " + screenZone);
                 }
 
                 if(config.isDebugMode() && tick % 10 == 0){
                     try{
                         saveDebugImage(screenshot, "cc_debug.png");
 
-                        System.out.println("Saved debug image");
+                        log.info("Saved debug image");
                     }catch(IOException e){
                         handleException(e);
                     }
@@ -289,7 +170,7 @@ public class LiveCaptionsLogger{
 
                 if(!inCaptionBox(screenshot)){
                     if(config.isDebugMode()){
-                        System.out.println("CC Window not detected");
+                        log.info("CC Window not detected");
                     }
 
                     closeLogger();
@@ -305,6 +186,7 @@ public class LiveCaptionsLogger{
 
                         executorService.execute(() -> {
                             try{
+                                //Start the OCR process
                                 String text = tesseract.doOCR(filteredImage);
 
                                 text = text.replace("|", "I"); //This one is particularly common
@@ -314,9 +196,10 @@ public class LiveCaptionsLogger{
                                 }
 
                                 if(config.isDebugMode()){
-                                    System.out.println("OCR Saw: " + text);
+                                    log.info("OCR Saw: " + text);
                                 }
 
+                                //Process the results
                                 String[] lines = text.split("\\n");
 
                                 synchronized(lastLines){
@@ -326,7 +209,7 @@ public class LiveCaptionsLogger{
                                             //This checks if more than 80% of a line matches the other
                                             double distance = jaroWinklerDistance.apply(oldLine, line);
                                             if(config.isDebugMode()){
-                                                System.out.println("Distance between previous line " + distance + " " + oldLine + ":" + line);
+                                                log.info("Distance between previous line " + distance + " " + oldLine + ":" + line);
                                             }
 
                                             if(distance <= 0.20 || oldLine.contains(line)){
@@ -340,7 +223,7 @@ public class LiveCaptionsLogger{
                                             double distance = jaroWinklerDistance.apply(oldestEntry,
                                                 lastPrintedLine != null ? lastPrintedLine : "");
                                             if(config.isDebugMode()){
-                                                System.out.println("Distance from the last line " + distance);
+                                                log.info("Distance from the last line " + distance);
                                             }
 
                                             if(distance > 0.20){
@@ -354,30 +237,34 @@ public class LiveCaptionsLogger{
                                     lastLines.addAll(Arrays.asList(lines));
                                 }
                             }catch(TesseractException e){
-                                //Seems safe to just ignore
-                                e.printStackTrace();
+                                //Seems safe to just ignore this
+                                handleException(e, false);
                             }
                         });
 
                         executorService.shutdown();
 
                         try{
+                            //TODO: At least on linux, libtesseract.so can randomly crash the JVM when the thread is interrupted
+                            //We can't cancel OCR when it decides to hang at a native level, and this workaround is not safe either
+                            //This is something that should be addressed by Tesseract or tess4j's team
                             if(!executorService.awaitTermination(3000, TimeUnit.MILLISECONDS)){
-                                System.out.println("Skipping a tick, OCR took too long");
+                                log.error("Skipping a tick, OCR took too long");
                             }
                         }catch(InterruptedException e){
-                            e.printStackTrace();
+                            //Nothing
                         }
                     }finally{
                         tesseractLock.unlock();
                     }
                 }else{
                     if(config.isDebugMode()){
-                        System.out.println("Could not acquire lock. Skipping OCR.");
+                        log.warn("Could not acquire lock. Skipping OCR.");
                     }
                 }
             };
 
+            //Schedule the main program loop, we do not rely on the main thread here.
             ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
             int clampedRateMs = clamp(config.getCaptureRateMs(), 50, 2500);
@@ -388,28 +275,130 @@ public class LiveCaptionsLogger{
         }
     }
 
-    private void openDirectoryPicker(){
-        JFileChooser fileChooser = new JFileChooser(FileSystemView.getFileSystemView().getHomeDirectory());
-        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+    /**
+     * Builds the system tray menu.
+     *
+     * TODO: move this to its own class, migrate to JPopupMenu to add mouse over tooltips
+     */
+    private PopupMenu buildPopupMenu(){
+        PopupMenu popup = new PopupMenu();
 
-        int result = fileChooser.showOpenDialog(null);
+        popup.add(buildMenuItem("Toggle LiveCaptions Logging", (ActionEvent e) -> {
+            config.setCurrentlyLogging(!config.isCurrentlyLogging());
 
-        if(result == JFileChooser.APPROVE_OPTION){
-            String selectedDirectory = fileChooser.getSelectedFile().getAbsolutePath();
-
-            if(config.isDebugMode()){
-                System.out.println("Selected Directory: " + selectedDirectory);
+            if(!config.isCurrentlyLogging()){
+                closeLogger();
             }
 
-            trayIcon.displayMessage(REGISTRY_APP_NAME, "Output path set to " + selectedDirectory, TrayIcon.MessageType.INFO);
+            updateConfig();
 
-            config.setOutputPath(selectedDirectory);
+            trayIcon.displayMessage(REGISTRY_APP_NAME, "Live caption logging is now " + (config.isCurrentlyLogging() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+        }));
+
+        popup.add(buildMenuItem("Toggle Contrast Mode", (ActionEvent e) -> {
+            config.setContrastMode(!config.isContrastMode());
 
             updateConfig();
-            closeLogger();
+
+            trayIcon.displayMessage(REGISTRY_APP_NAME, "Contrast mode is now " + (config.isContrastMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+        }));
+
+        popup.add(buildMenuItem("Toggle Logging of Any Text", (ActionEvent e) -> {
+            config.setCaptureAnyText(!config.isCaptureAnyText());
+
+            updateConfig();
+
+            trayIcon.displayMessage(REGISTRY_APP_NAME, "Logging of any text within the capture window is now " + (config.isCaptureAnyText() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+        }));
+
+        if(isWindows()){
+            popup.add(buildMenuItem("Toggle Auto Start", (ActionEvent e) -> {
+                boolean result = checkStartupStatusAndToggle();
+
+                trayIcon.displayMessage(REGISTRY_APP_NAME, "Application auto start is now " + (result ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+            }));
+        }
+
+        popup.add(buildMenuItem("Toggle Debug Mode", (ActionEvent e) -> {
+            config.setDebugMode(!config.isDebugMode());
+
+            updateConfig();
+
+            trayIcon.displayMessage(REGISTRY_APP_NAME, "Debug mode is now " + (config.isDebugMode() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+        }));
+
+        popup.add(buildMenuItem("Configure Captions Area", (ActionEvent e) -> {
+            openSnipper();
+        }));
+
+        popup.add(buildMenuItem("Configure Output Folder", (ActionEvent e) -> {
+            openDirectoryPicker();
+        }));
+
+        popup.add(buildMenuItem("Start Live Captions", (ActionEvent e) -> {
+            startLiveCaptions();
+        }));
+
+        popup.add(buildMenuItem("Exit", (ActionEvent e) -> {
+            log.info("Exiting....");
+
+            try{
+                closeLogger();
+            }catch(Exception e1){
+                handleException(e1);
+            }finally{
+                System.exit(0);
+            }
+        }));
+
+        return popup;
+    }
+
+    /**
+     * Helper for building system tray menu entries.
+     */
+    private MenuItem buildMenuItem(String name, ActionListener actionListener){
+        MenuItem menuItem = new MenuItem(name);
+        menuItem.addActionListener(actionListener);
+
+        return menuItem;
+    }
+
+    /**
+     * Opens a dialog window for selecting a custom output directory
+     *
+     * @see getOrCreateOutputDirectory()
+     */
+    private void openDirectoryPicker(){
+        try{
+            JFileChooser fileChooser = new JFileChooser(FileSystemView.getFileSystemView().getHomeDirectory());
+            fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+
+            int result = fileChooser.showOpenDialog(null);
+
+            if(result == JFileChooser.APPROVE_OPTION){
+                String selectedDirectory = fileChooser.getSelectedFile().getAbsolutePath();
+
+                if(config.isDebugMode()){
+                    log.info("Selected Directory: " + selectedDirectory);
+                }
+
+                trayIcon.displayMessage(REGISTRY_APP_NAME, "Output path set to " + selectedDirectory, TrayIcon.MessageType.INFO);
+
+                config.setOutputPath(selectedDirectory);
+
+                updateConfig();
+                closeLogger();
+            }
+        }catch(HeadlessException e){
+            handleException(e);
         }
     }
 
+    /**
+     * Updates the capture area based on the current configuration, accounting
+     * for the current display scale.
+     */
     private void updateScreenZone(){
         AffineTransform transform = getGraphicsTransformAt(config.getBoxStartX(), config.getBoxStartY());
         double scaleX = transform.getScaleX();
@@ -421,19 +410,19 @@ public class LiveCaptionsLogger{
         int scaledBoxEndY = (int)(config.getBoxEndY() / scaleY);
 
         if(config.isDebugMode()){
-            System.out.println("Scaling Factor 1: " + "X " + scaleX + " Y " + scaleY);
+            log.info("Scaling Factor 1: " + "X " + scaleX + " Y " + scaleY);
 
-            System.out.println("Real Rectangle Coordinates:");
-            System.out.println("StartX: " + config.getBoxStartX());
-            System.out.println("StartY: " + config.getBoxStartY());
-            System.out.println("EndX: " + config.getBoxEndX());
-            System.out.println("EndY: " + config.getBoxEndY());
+            log.info("Real Rectangle Coordinates:");
+            log.info("StartX: " + config.getBoxStartX());
+            log.info("StartY: " + config.getBoxStartY());
+            log.info("EndX: " + config.getBoxEndX());
+            log.info("EndY: " + config.getBoxEndY());
 
-            System.out.println("Scaled Rectangle Coordinates:");
-            System.out.println("StartX: " + scaledBoxStartX);
-            System.out.println("StartY: " + scaledBoxStartY);
-            System.out.println("EndX: " + scaledBoxEndX);
-            System.out.println("EndY: " + scaledBoxEndY);
+            log.info("Scaled Rectangle Coordinates:");
+            log.info("StartX: " + scaledBoxStartX);
+            log.info("StartY: " + scaledBoxStartY);
+            log.info("EndX: " + scaledBoxEndX);
+            log.info("EndY: " + scaledBoxEndY);
         }
 
         screenZone = new Rectangle(scaledBoxStartX, scaledBoxStartY,
@@ -441,6 +430,10 @@ public class LiveCaptionsLogger{
             scaledBoxEndY - scaledBoxStartY);
     }
 
+    /**
+     * Updates the capture area based on the output generated by ScreenSnipper
+     * and scales/downscales it based on the current screen scale.
+     */
     public void setBounds(int startX, int startY, int endX, int endY){
         AffineTransform transform = getGraphicsTransformAt(config.getBoxStartX(), config.getBoxStartY());
         double scaleX = transform.getScaleX();
@@ -452,19 +445,19 @@ public class LiveCaptionsLogger{
         int scaledEndY = (int)(endY * scaleY);
 
         if(config.isDebugMode()){
-            System.out.println("Scaling Factor 2: " + "X " + scaleX + " Y " + scaleY);
+            log.info("Scaling Factor 2: " + "X " + scaleX + " Y " + scaleY);
 
-            System.out.println("Provided Rectangle Coordinates:");
-            System.out.println("StartX: " + startX);
-            System.out.println("StartY: " + startY);
-            System.out.println("EndX: " + endX);
-            System.out.println("EndY: " + endY);
+            log.info("Provided Rectangle Coordinates:");
+            log.info("StartX: " + startX);
+            log.info("StartY: " + startY);
+            log.info("EndX: " + endX);
+            log.info("EndY: " + endY);
 
-            System.out.println("Provided Scaled Rectangle Coordinates:");
-            System.out.println("StartX: " + scaledStartX);
-            System.out.println("StartY: " + scaledStartY);
-            System.out.println("EndX: " + scaledEndX);
-            System.out.println("EndY: " + scaledEndY);
+            log.info("Provided Scaled Rectangle Coordinates:");
+            log.info("StartX: " + scaledStartX);
+            log.info("StartY: " + scaledStartY);
+            log.info("EndX: " + scaledEndX);
+            log.info("EndY: " + scaledEndY);
         }
 
         if(Math.abs(scaledEndX - scaledStartX) > 5 && Math.abs(scaledEndY - scaledStartY) > 5){
@@ -475,12 +468,20 @@ public class LiveCaptionsLogger{
 
             updateScreenZone();
             updateConfig();
+
+            trayIcon.displayMessage(REGISTRY_APP_NAME, "The capture area has been updated", TrayIcon.MessageType.INFO);
         }else{
             trayIcon.displayMessage(REGISTRY_APP_NAME,
                 "Please select a larger area", TrayIcon.MessageType.INFO);
         }
     }
 
+    /**
+     * Retrieves the graphics transform at the specified screen coordinates
+     *
+     * If the coordinates are not within any specific screen device,
+     * the default screen device's graphics transform is returned.
+     */
     public AffineTransform getGraphicsTransformAt(int x, int y){
         GraphicsEnvironment environment = GraphicsEnvironment.getLocalGraphicsEnvironment();
 
@@ -501,38 +502,56 @@ public class LiveCaptionsLogger{
         return tx;
     }
 
-    public void openSnipper() throws Exception{
-        if(this.snipper != null){
+    /**
+     * Opens the tool to manually select the captions capture area.
+     */
+    public void openSnipper(){
+        if(snipper != null){
             closeSnipper();
             return;
         }
 
-        this.snipper = new ScreenSnipper(this, new Window(null));
+        snipper = new ScreenSnipper(this, new Window(null));
+
+        try{
+            snipper.init();
+        }catch(Exception e){
+            handleException(e);
+        }
     }
 
+    /**
+     * Closes the tool to manually select the captions capture area
+     * when called by ScreenSnipper itself.
+     */
     public void closeSnipper(){
-        if(this.snipper != null){
-            this.snipper.setVisible(false);
-            this.snipper.dispose();
+        if(snipper != null){
+            snipper.setVisible(false);
+            snipper.dispose();
         }
 
-        this.snipper = null;
+        snipper = null;
 
         startLiveCaptions();
     }
 
     /**
      * Saves debug images (for troubleshooting) to the output
-     * folder if debugMode = true
+     * folder if debugMode = true.
      */
     private void saveDebugImage(BufferedImage image, String fileName) throws IOException{
-        File picturesDirectory = this.getOrCreateOutputDirectory();
+        File picturesDirectory = getOrCreateOutputDirectory();
 
         File destinationFile = new File(picturesDirectory, fileName);
 
         ImageIO.write(image, "png", destinationFile);
     }
 
+    /**
+     * This shortcut is exclusive for Windows 11.
+     *
+     * TODO: check windows version
+     */
     private void startLiveCaptions(){
         if(isWindows()){
             try{
@@ -544,13 +563,26 @@ public class LiveCaptionsLogger{
     }
 
     private void updateConfig(){
+        updateConfig(config);
+    }
+
+    /**
+     * Writes changes made to the Settings class to disk.
+     */
+    private void updateConfig(Settings configIn){
         try{
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, config);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, configIn);
         }catch(IOException e){
             handleException(e);
         }
     }
 
+    /**
+     * Toggles the status of automatic startup
+     *
+     * Currently only Windows is implemented, the Auto Start option
+     * is not present in the tray menu if not running under Windows.
+     */
     private boolean checkStartupStatusAndToggle(){
         try{
             ProcessBuilder checkBuilder = new ProcessBuilder("reg", "query",
@@ -573,9 +605,9 @@ public class LiveCaptionsLogger{
                 if(config.isDebugMode()){
                     int updateExitValue = updateProcess.exitValue();
                     if(updateExitValue == 0){
-                        System.out.println("Startup entry updated successfully.");
+                        log.info("Startup entry updated successfully.");
                     }else{
-                        System.out.println("Failed to update startup entry.");
+                        log.error("Failed to update startup entry.");
                     }
                 }
 
@@ -593,7 +625,7 @@ public class LiveCaptionsLogger{
                 launchString = launchString.replace("LiveCaptionsLogger.jar", "start.bat");
                 launchString = launchString.replace("classes", "start.bat");
                 if(config.isDebugMode()){
-                    System.out.println(launchString);
+                    log.info(launchString);
                 }
 
                 ProcessBuilder createBuilder = new ProcessBuilder(
@@ -610,9 +642,9 @@ public class LiveCaptionsLogger{
 
                 if(config.isDebugMode()){
                     if(exitCode == 0){
-                        System.out.println("Registry entry added successfully.");
+                        log.info("Registry entry added successfully.");
                     }else{
-                        System.out.println("Failed to add registry entry. Exit code: " + exitCode);
+                        log.error("Failed to add registry entry. Exit code: " + exitCode);
                     }
                 }
 
@@ -624,6 +656,12 @@ public class LiveCaptionsLogger{
         }
     }
 
+    /**
+     * Flushes current lines to disk, even if they are not finished,
+     * and closes the current log file.
+     *
+     * This method is called before exit or when the CC window goes away.
+     */
     private void closeLogger(){
         synchronized(lastLines){
             while(!lastLines.isEmpty()){
@@ -641,7 +679,8 @@ public class LiveCaptionsLogger{
     }
 
     /**
-     * Filter out non-white pixels for better visibility
+     * Filters out non-white pixels for better visibility,
+     * This is specifically tailored for white text.
      */
     private BufferedImage filterWhite(BufferedImage image){
         if(config.isContrastMode()){
@@ -678,7 +717,7 @@ public class LiveCaptionsLogger{
      * Ignore capturing if we aren't seeing the caption box
      *
      * This method checks if all four corners of the selected
-     * screen area are darker than the set RGB threshold
+     * screen area are darker than the set RGB threshold.
      */
     private boolean inCaptionBox(BufferedImage image){
         if(config.isCaptureAnyText()){//Results might not be the best, toggle contrast mode on and do NOT select the whole screen unless you have a really good CPU
@@ -698,7 +737,7 @@ public class LiveCaptionsLogger{
             int blue = colour & 0xFF;
 
             if(config.isDebugMode()){
-                System.out.println(red + ":" + green + ":" + blue);
+                log.info(red + ":" + green + ":" + blue);
             }
 
             int threshold = config.getCaptionWindowColorThreshold();
@@ -707,8 +746,11 @@ public class LiveCaptionsLogger{
         });
     }
 
+    /**
+     * Logs finished lines to disk.
+     */
     private void logToFile(String line){
-        System.out.println("Line Finished: " + line);
+        log.info("Line Finished: " + line);
 
         if(currentFile == null){
             Calendar now = Calendar.getInstance();
@@ -727,6 +769,10 @@ public class LiveCaptionsLogger{
         }
     }
 
+    /**
+     * Retrieves, or if it does not exist, creates an output directory
+     * for the logger and debug images.
+     */
     private File getOrCreateOutputDirectory(){
         File file;
         if(!config.getOutputPath().isEmpty()){
@@ -750,24 +796,36 @@ public class LiveCaptionsLogger{
         }
     }
 
-    public void handleException(Throwable e){
-        e.printStackTrace();
-
-        if(trayIcon == null){
-            throw new RuntimeException(e);
-        }
-
-        trayIcon.displayMessage(REGISTRY_APP_NAME,
-            "An error occurred: " + e.getLocalizedMessage(), TrayIcon.MessageType.INFO);
+    public final void handleException(Throwable e){
+        handleException(e, true);
     }
 
     /**
-     * In Java 21 we finally don't need to bring this method to every program we build
+     * Just some rudimentary exception handling.
+     */
+    public final void handleException(Throwable e, boolean displayToUser){
+        e.printStackTrace();
+
+        if(displayToUser && trayIcon != null){
+            trayIcon.displayMessage(REGISTRY_APP_NAME,
+                "An error occurred: " + e.getLocalizedMessage(), TrayIcon.MessageType.INFO);
+        }
+    }
+
+    /**
+     * In Java 21 we finally don't need to bring this method to every program we build.
+     *
+     * @see Math.clamp(int, int, int)
      */
     public static int clamp(int value, int min, int max){
         return Math.max(min, Math.min(value, max));
     }
 
+    /**
+     * This program should also work in other platforms if you are trying to
+     * capture something other than Windows 11's LiveCaptions, we use this
+     * to filter out the windows-only features from other platforms.
+     */
     public static boolean isWindows(){
         String osName = System.getProperty("os.name").toLowerCase();
         return osName.contains("windows");
@@ -775,7 +833,7 @@ public class LiveCaptionsLogger{
 
     public static void main(String[] args){
         if(SystemTray.isSupported()){
-            System.out.println("Starting...");
+            log.info("Starting...");
 
             try{
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -784,14 +842,10 @@ public class LiveCaptionsLogger{
             }
 
             LiveCaptionsLogger instance = new LiveCaptionsLogger();
-            System.out.println("Started");
+            log.info("Started");
 
             Thread.setDefaultUncaughtExceptionHandler((Thread t, Throwable e) -> {
-                try{
-                    instance.handleException(e);
-                }catch(Exception e1){//Just in case the irony pays off
-                    e1.printStackTrace();
-                }
+                instance.handleException(e);
             });
         }else{
             System.err.println("System tray not supported???? did you run this on a calculator?");
