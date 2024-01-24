@@ -788,6 +788,9 @@ public class LiveCaptionsLogger{
         return file;
     }
 
+    /**
+     * Returns the Documents path used as default save location.
+     */
     private String getDocumentsPath(){
         if(isWindows()){
             return System.getProperty("user.home") + "\\Documents";
