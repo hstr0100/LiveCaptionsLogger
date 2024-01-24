@@ -79,6 +79,8 @@ public class Settings{
      * 255 is the same as CaptureAnyText = true
      * 30 makes sure only gray~black caption boxes will work with this program
      * this value is checked against the RGB components of the pixels around the four corners.
+     *
+     * This value is ignored if CaptureAnyText is set to true.
      */
     @JsonProperty("CaptionWindowDetectColorThreshold")
     private int captionWindowColorThreshold = 30;
