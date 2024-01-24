@@ -34,12 +34,12 @@ For Windows 11, scroll down and select the x64 JRE .msi, then download and insta
 
 If you want to compile this program yourself:
 
-Ensure you have OpenJDK 11 or a newer version installed. Please note that this requirement differs from the one needed to run precompiled binaries, which only necessitate a JRE.
+1. Ensure you have OpenJDK 11 or a newer version installed. Please note that this requirement differs from the one needed to run precompiled binaries, which only necessitate a JRE.
 
-Download and install [Maven](https://maven.apache.org/guides/getting-started/windows-prerequisites.html) for your preferred platform; instructions may vary.\
+2. Download and install [Maven](https://maven.apache.org/guides/getting-started/windows-prerequisites.html) for your preferred platform; instructions may vary.\
 Confirm that Maven is added to your system's PATH.
 
-Navigate to the directory containing the pom.xml file and execute the following \
+3. Navigate to the directory containing the pom.xml file and execute the following \
 `mvn clean install`\
 or, if you are on Windows:\
 `mvn.cmd clean install`\

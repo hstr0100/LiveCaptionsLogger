@@ -11,6 +11,9 @@ public class ScreenSnipper extends Window{
     private static final int X_INDEX = 0;
     private static final int Y_INDEX = 1;
 
+    private final LiveCaptionsLogger main;
+    private final double shadowRatio;
+
     private int[] screenStateCache;
     private int[] screenShadowCache;
     private BufferedImage screenBuffer;
@@ -19,22 +22,26 @@ public class ScreenSnipper extends Window{
     private int startY;
     private int endX;
     private int endY;
-    private double shadowRatio;
-    private LiveCaptionsLogger main;
 
     private static final Font TEXT_FONT = new Font("SansSerif", Font.BOLD, 25);
     private static final Color TEXT_COLOR = Color.WHITE;
 
     public ScreenSnipper(LiveCaptionsLogger main, Window owner){
         super(owner);
+
         this.main = main;
         this.shadowRatio = 0.6;
+    }
+
+    public void init(){
         screenRect = getScreenBounds();
-        takeScreenShot();
+        captureReferenceScreenState();
 
         if(LiveCaptionsLogger.isWindows()){
             try{
-                //It gets in the way
+                //It gets in the way due to the always on top nature of live captions
+                //this only runs on Windows 11
+                //TODO: check windows version
                 Process process = Runtime.getRuntime().exec("taskkill /f /im LiveCaptions.exe");
                 process.waitFor();
             }catch(IOException e){
@@ -44,10 +51,6 @@ public class ScreenSnipper extends Window{
             }
         }
 
-        setupUI();
-    }
-
-    private void setupUI(){
         SnippingMouseListener sml = new SnippingMouseListener();
         addMouseListener(sml);
         addMouseMotionListener(sml);
@@ -60,6 +63,7 @@ public class ScreenSnipper extends Window{
     @Override
     public void paint(Graphics g){
         super.paint(g);
+
         if(screenStateCache != null){
             if(screenBuffer == null){
                 screenBuffer = selectRegion(screenStateCache, screenShadowCache, screenRect.width, screenRect.height, startX, startY, endX, endY);
@@ -73,10 +77,11 @@ public class ScreenSnipper extends Window{
     @Override
     public void update(Graphics g){
         screenBuffer = selectRegion(screenStateCache, screenShadowCache, screenRect.width, screenRect.height, startX, startY, endX, endY);
+
         paint(g);
     }
 
-    private void takeScreenShot(){
+    private void captureReferenceScreenState(){
         try{
             Robot robot = new Robot();
             BufferedImage screenShot = robot.createScreenCapture(screenRect);
@@ -119,22 +124,24 @@ public class ScreenSnipper extends Window{
 
         BufferedImage finalImg = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         finalImg.getRaster().setDataElements(0, 0, width, height, copyImg);
+
         return finalImg;
     }
 
     private int[] getShadow(int[] img, int width, int height){
         int[] copyImg = new int[width * height];
         for(int i = 0; i < copyImg.length; i++){
-            copyImg[i] = makeShadow(img[i], shadowRatio);
+            copyImg[i] = createShadow(img[i], shadowRatio);
         }
 
         return copyImg;
     }
 
-    private int makeShadow(int rgb, double ratio){
+    private int createShadow(int rgb, double ratio){
         int red = Math.min(255, (int)(((rgb >> 16) & 0xFF) * ratio));
         int blue = Math.min(255, (int)(((rgb >> 8) & 0xFF) * ratio));
         int green = Math.min(255, (int)((rgb & 0xFF) * ratio));
+
         return (red << 16) + (blue << 8) + green;
     }
 

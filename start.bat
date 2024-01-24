@@ -1,6 +1,7 @@
 @echo off
 setlocal
 
+:restart
 rem Check if Java is installed
 java -version >nul 2>&1
 if %errorlevel% neq 0 (
@@ -16,6 +17,6 @@ cd /d "%batchDir%"
 
 rem Run the JAR file using its relative path to this batch file
 rem You might see a console window open up every time this program is started
-start "LiveCaptionsLogger" javaw -Xmx512M -jar target\LiveCaptionsLogger.jar
+start "LiveCaptionsLogger" /B javaw -Xmx512M -jar target\LiveCaptionsLogger.jar
 
 endlocal
