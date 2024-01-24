@@ -128,11 +128,6 @@ public class LiveCaptionsLogger{
                 throw new RuntimeException("tessdata folder not found!");
             }
 
-            Tesseract tesseract = new Tesseract();
-
-            tesseract.setDatapath(tessDataFolder.getAbsolutePath());
-            tesseract.setLanguage(config.getTessLanguage());
-
             if(config.isDebugMode()){
                 log.info("Tesseract initialized");
             }
@@ -186,6 +181,11 @@ public class LiveCaptionsLogger{
 
                         executorService.execute(() -> {
                             try{
+                                Tesseract tesseract = new Tesseract();
+
+                                tesseract.setDatapath(tessDataFolder.getAbsolutePath());
+                                tesseract.setLanguage(config.getTessLanguage());
+
                                 //Start the OCR process
                                 String text = tesseract.doOCR(filteredImage);
 
@@ -831,7 +831,7 @@ public class LiveCaptionsLogger{
      * running the program on other platforms.
      *
      * This program can run in other OSs for capturing captions other than
-     * Windows 11's LiveCaptions, such as Youtube's.
+     * Windows 11's LiveCaptions such as Youtube's.
      */
     public static boolean isWindows(){
         String osName = System.getProperty("os.name").toLowerCase();
