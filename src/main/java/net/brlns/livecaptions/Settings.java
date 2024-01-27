@@ -14,7 +14,7 @@ public class Settings{
     /**
      * Screen coordinates for the live captions
      *
-     * Ships with default settings for 1080p
+     * Ships with default settings for 1080p at 125% scale
      * If you have a different resolution make sure
      * to configure the capture area via the system tray menu.
      */

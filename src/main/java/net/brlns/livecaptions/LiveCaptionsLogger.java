@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
 import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileSystemView;
 import lombok.extern.slf4j.Slf4j;
@@ -333,6 +334,23 @@ public class LiveCaptionsLogger{
 
         popup.add(buildMenuItem("Configure Output Folder", (ActionEvent e) -> {
             openDirectoryPicker();
+        }));
+
+        popup.add(buildMenuItem("Restore Default Settings", (ActionEvent e) -> {
+            int option = JOptionPane.showConfirmDialog(null,
+                "Are you sure you want to restore default settings?",
+                "Restore Default Settings",
+                JOptionPane.YES_NO_OPTION);
+
+            if(option == JOptionPane.YES_OPTION){
+                config = new Settings();
+
+                updateConfig();
+                updateScreenZone();
+                closeLogger();
+
+                trayIcon.displayMessage(REGISTRY_APP_NAME, "Settings have been restored to default", TrayIcon.MessageType.INFO);
+            }
         }));
 
         popup.add(buildMenuItem("Start Live Captions", (ActionEvent e) -> {
