@@ -17,10 +17,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.imageio.ImageIO;
@@ -68,6 +70,8 @@ public class LiveCaptionsLogger{
     private ScreenSnipper snipper = null;
 
     private final AtomicInteger currentTick = new AtomicInteger(0);
+    private final AtomicBoolean liveCaptionsRunning = new AtomicBoolean(true);
+    private int ticksSinceLastRunning = 0;
 
     public LiveCaptionsLogger(){
         //Initialize the config file
@@ -146,6 +150,38 @@ public class LiveCaptionsLogger{
                 if(!config.isCurrentlyLogging()){
                     log.info("Logging is off");
                     return;
+                }
+
+                if(isWindows() && config.isLiveCaptionsSensing()){
+                    //We would check if CaptureAnyText is off before running this, but until we have mouse tooltips to explain why this setting conflicts with the other, this should do it.
+                    if(tick % 5 == 0){//Lets not call isLiveCaptionsRunning() every second, 5 should be fine.
+                        long timeNow = System.currentTimeMillis();
+                        CompletableFuture<Boolean> isRunningTask = CompletableFuture.supplyAsync(this::isLiveCaptionsRunning);
+
+                        isRunningTask.thenAcceptAsync((isRunning) -> {
+                            if(config.isDebugMode()){
+                                log.info((System.currentTimeMillis() - timeNow) + "ms " + isRunning);
+                            }
+
+                            if(isRunning){
+                                liveCaptionsRunning.set(true);
+                                ticksSinceLastRunning = 0;
+                            }else{
+                                if(++ticksSinceLastRunning == 4){ // ~20 seconds of inactivity, varies based on the set tick rate
+                                    liveCaptionsRunning.set(false);
+                                    closeLogger();
+                                }
+                            }
+                        }).exceptionally((e) -> {
+                            handleException(e);
+                            return null;
+                        });
+                    }
+
+                    if(!liveCaptionsRunning.get()){
+                        log.info("Sensed that Live captions is not running, logging is off");
+                        return;
+                    }
                 }
 
                 BufferedImage screenshot = robot.createScreenCapture(screenZone);
@@ -295,6 +331,16 @@ public class LiveCaptionsLogger{
 
             trayIcon.displayMessage(REGISTRY_APP_NAME, "Live caption logging is now " + (config.isCurrentlyLogging() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
         }));
+
+        if(isWindows()){
+            popup.add(buildMenuItem("Toggle LiveCaptions Sensing", (ActionEvent e) -> {
+                config.setLiveCaptionsSensing(!config.isLiveCaptionsSensing());
+
+                updateConfig();
+
+                trayIcon.displayMessage(REGISTRY_APP_NAME, "Live caption sensing (stops and starts logging automatically when LiveCaptions is running) is now " + (config.isLiveCaptionsSensing() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+            }));
+        }
 
         popup.add(buildMenuItem("Toggle Contrast Mode", (ActionEvent e) -> {
             config.setContrastMode(!config.isContrastMode());
@@ -593,6 +639,17 @@ public class LiveCaptionsLogger{
         }catch(IOException e){
             handleException(e);
         }
+    }
+
+    /**
+     * Checks if LiveCaptions is running
+     * Only works in Windows 11
+     */
+    private boolean isLiveCaptionsRunning(){
+        return ProcessHandle.allProcesses()
+            .anyMatch((processHandle)
+                -> processHandle.info().command().map((command)
+                -> command.contains("LiveCaptions.exe")).orElse(false));
     }
 
     /**

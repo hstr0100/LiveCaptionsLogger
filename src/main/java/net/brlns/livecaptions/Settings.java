@@ -35,6 +35,14 @@ public class Settings{
     private String outputPath = "";
 
     /**
+     * If you're only using this program with Windows 11's Live Captions,
+     * this setting allows you to control wether or not to automatically
+     * toggle logging on or off when the captions are running.
+     */
+    @JsonProperty("LiveCaptionsSensing")
+    private boolean liveCaptionsSensing = false;
+
+    /**
      * This option should be set to true if you're trying to capture anything
      * else that is not Windows 11's LiveCaptions with theme set to white on black.
      */
