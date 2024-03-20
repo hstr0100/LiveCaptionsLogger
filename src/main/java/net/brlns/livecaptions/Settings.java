@@ -35,9 +35,9 @@ public class Settings{
     private String outputPath = "";
 
     /**
-     * If you're only using this program with Windows 11's Live Captions,
-     * this setting allows you to control wether or not to automatically
-     * toggle logging on or off when the captions are running.
+     * If you are exclusively using this program with Windows 11's Live Captions,
+     * this setting enables you to determine whether to automatically toggle
+     * logging on or off when Live Captions is running.
      */
     @JsonProperty("LiveCaptionsSensing")
     private boolean liveCaptionsSensing = false;

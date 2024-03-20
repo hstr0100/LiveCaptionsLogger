@@ -153,14 +153,16 @@ public class LiveCaptionsLogger{
                 }
 
                 if(isWindows() && config.isLiveCaptionsSensing()){
-                    //We would check if CaptureAnyText is off before running this, but until we have mouse tooltips to explain why this setting conflicts with the other, this should do it.
+                    //We would check if CaptureAnyText is off before running this. However, until we have mouse tooltips to explain why this setting conflicts with the other, this should do.
                     if(tick % 5 == 0){//Lets not call isLiveCaptionsRunning() every second, 5 should be fine.
                         long timeNow = System.currentTimeMillis();
+
+                        //This method can be expensive depending on the system, so lets offload it to another thread
                         CompletableFuture<Boolean> isRunningTask = CompletableFuture.supplyAsync(this::isLiveCaptionsRunning);
 
                         isRunningTask.thenAcceptAsync((isRunning) -> {
                             if(config.isDebugMode()){
-                                log.info((System.currentTimeMillis() - timeNow) + "ms " + isRunning);
+                                log.info("Took " + (System.currentTimeMillis() - timeNow) + "ms. running: " + isRunning);
                             }
 
                             if(isRunning){
@@ -178,8 +180,10 @@ public class LiveCaptionsLogger{
                         });
                     }
 
+                    //This is not exactly mission-critical, LiveCaptions takes time to start up or wind down.
+                    //If the async future takes too long, it's acceptable for this to be updated around the next tick.
                     if(!liveCaptionsRunning.get()){
-                        log.info("Sensed that Live captions is not running, logging is off");
+                        log.info("Sensed that LiveCaptions is not running, logging is off");
                         return;
                     }
                 }
@@ -228,7 +232,7 @@ public class LiveCaptionsLogger{
 
                                 text = text.replace("|", "I"); //This one is particularly common
 
-                                if(text.contains("(") || text.contains(")")){//Not sure if those ever actually show up?
+                                if(text.contains("(") || text.contains(")")){//Not sure if these actually ever show up in closed captions?
                                     return;
                                 }
 
@@ -338,7 +342,7 @@ public class LiveCaptionsLogger{
 
                 updateConfig();
 
-                trayIcon.displayMessage(REGISTRY_APP_NAME, "Live caption sensing (stops and starts logging automatically when LiveCaptions is running) is now " + (config.isLiveCaptionsSensing() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
+                trayIcon.displayMessage(REGISTRY_APP_NAME, "LiveCaptions sensing (stops and starts logging automatically when LiveCaptions is running) is now " + (config.isLiveCaptionsSensing() ? "ON" : "OFF"), TrayIcon.MessageType.INFO);
             }));
         }
 
@@ -612,7 +616,7 @@ public class LiveCaptionsLogger{
     }
 
     /**
-     * This shortcut is exclusive for Windows 11.
+     * This shortcut is specific to Windows 11.
      *
      * TODO: check windows version
      */
@@ -642,8 +646,8 @@ public class LiveCaptionsLogger{
     }
 
     /**
-     * Checks if LiveCaptions is running
-     * Only works in Windows 11
+     * Checks whether LiveCaptions is currently running.
+     * This is specific to Windows 11.
      */
     private boolean isLiveCaptionsRunning(){
         return ProcessHandle.allProcesses()
