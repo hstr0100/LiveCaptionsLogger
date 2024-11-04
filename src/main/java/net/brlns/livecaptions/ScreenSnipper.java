@@ -1,11 +1,31 @@
+/*
+ * Copyright (C) 2024 hstr0100
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 package net.brlns.livecaptions;
 
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
+import lombok.extern.slf4j.Slf4j;
 
+/**
+ * @author Gabriel / hstr0100 / vertx010
+ */
+@Slf4j
 public class ScreenSnipper extends Window{
 
     private static final int X_INDEX = 0;
@@ -26,34 +46,23 @@ public class ScreenSnipper extends Window{
     private static final Font TEXT_FONT = new Font("SansSerif", Font.BOLD, 25);
     private static final Color TEXT_COLOR = Color.WHITE;
 
-    public ScreenSnipper(LiveCaptionsLogger main, Window owner){
-        super(owner);
+    public ScreenSnipper(LiveCaptionsLogger mainIn, Window ownerIn){
+        super(ownerIn);
 
-        this.main = main;
-        this.shadowRatio = 0.6;
+        main = mainIn;
+        shadowRatio = 0.6;
     }
 
     public void init(){
         screenRect = getScreenBounds();
         captureReferenceScreenState();
 
-        if(LiveCaptionsLogger.isWindows()){
-            try{
-                //It gets in the way due to the always on top nature of live captions
-                //this only runs on Windows 11
-                //TODO: check windows version
-                Process process = Runtime.getRuntime().exec("taskkill /f /im LiveCaptions.exe");
-                process.waitFor();
-            }catch(IOException e){
-                main.handleException(e);
-            }catch(InterruptedException e){
-                //Nothing
-            }
-        }
+        main.stopLiveCaptions();
 
         SnippingMouseListener sml = new SnippingMouseListener();
         addMouseListener(sml);
         addMouseMotionListener(sml);
+
         setAlwaysOnTop(true);
         setBounds(screenRect);
         setCursor(new Cursor(Cursor.CROSSHAIR_CURSOR));
@@ -84,9 +93,9 @@ public class ScreenSnipper extends Window{
     private void captureReferenceScreenState(){
         try{
             Robot robot = new Robot();
-            BufferedImage screenShot = robot.createScreenCapture(screenRect);
+            BufferedImage screenshot = robot.createScreenCapture(screenRect);
             int width = screenRect.width, height = screenRect.height;
-            screenStateCache = screenShot.getRGB(0, 0, width, height, null, 0, width);
+            screenStateCache = screenshot.getRGB(0, 0, width, height, null, 0, width);
             screenShadowCache = getShadow(screenStateCache, width, height);
         }catch(AWTException e){
             main.handleException(e);

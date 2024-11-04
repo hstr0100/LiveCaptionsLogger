@@ -1,5 +1,22 @@
+/*
+ * Copyright (C) 2024 hstr0100
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 package net.brlns.livecaptions;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.awt.*;
 import java.awt.color.ColorSpace;
@@ -12,6 +29,8 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,6 +50,8 @@ import javax.swing.JOptionPane;
 import javax.swing.UIManager;
 import javax.swing.filechooser.FileSystemView;
 import lombok.extern.slf4j.Slf4j;
+import net.brlns.livecaptions.util.LoggerUtils;
+import net.brlns.livecaptions.util.Nullable;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import net.sourceforge.tess4j.util.LoadLibs;
@@ -39,7 +60,7 @@ import org.apache.commons.text.similarity.JaroWinklerDistance;
 /**
  * LiveCaptionsLogger
  *
- * @author Gabriel / hstr0100
+ * @author Gabriel / hstr0100 / vertx010
  */
 @Slf4j
 public class LiveCaptionsLogger{
@@ -62,7 +83,7 @@ public class LiveCaptionsLogger{
 
     private Rectangle screenZone;
 
-    private File configFile = new File("config.json");
+    private File configFile;
     private Settings config;
 
     private ObjectMapper objectMapper = new ObjectMapper();
@@ -73,10 +94,27 @@ public class LiveCaptionsLogger{
     private final AtomicBoolean liveCaptionsRunning = new AtomicBoolean(true);
     private int ticksSinceLastRunning = 0;
 
+    @SuppressWarnings("this-escape") //TODO: properly deal with this, the issue lies in openSnipper()
     public LiveCaptionsLogger(){
+        File logFile = new File("application_log.txt");
+        File previousLogFile = new File("application_log_previous.txt");
+
+        if(logFile.exists()){
+            if(previousLogFile.exists()){
+                previousLogFile.delete();
+            }
+
+            logFile.renameTo(previousLogFile);
+        }
+
+        LoggerUtils.setLogFile(logFile);
+
         //Initialize the config file
+        configFile = new File("config.json");
+
         if(!configFile.exists()){
-            updateConfig(new Settings());
+            config = new Settings();
+            updateConfig();
         }
 
         try{
@@ -85,15 +123,10 @@ public class LiveCaptionsLogger{
             config = new Settings();
             updateConfig();
 
-            handleException(e);
+            handleException(e, true);
         }
 
-        if(config.isDebugMode()){
-            //Slf4j in particular does not allow switching log level during runtime
-            //Here we'd like to have the option to toggle it on the fly
-            //Hence why this is not using not log.debug
-            log.info("Loaded config file");
-        }
+        log.info("Loaded config file");
 
         tray = SystemTray.getSystemTray();
 
@@ -133,9 +166,7 @@ public class LiveCaptionsLogger{
                 throw new RuntimeException("tessdata folder not found!");
             }
 
-            if(config.isDebugMode()){
-                log.info("Tesseract initialized");
-            }
+            log.debug("Tesseract initialized");
 
             //Initialize the string comparison tool
             JaroWinklerDistance jaroWinklerDistance = new JaroWinklerDistance();
@@ -143,9 +174,7 @@ public class LiveCaptionsLogger{
             Runnable captureAndProcess = () -> {
                 int tick = currentTick.incrementAndGet();
 
-                if(config.isDebugMode()){
-                    log.info("Tick #" + tick);
-                }
+                log.debug("Tick #" + tick);
 
                 if(!config.isCurrentlyLogging()){
                     log.info("Logging is off");
@@ -161,9 +190,7 @@ public class LiveCaptionsLogger{
                         CompletableFuture<Boolean> isRunningTask = CompletableFuture.supplyAsync(this::isLiveCaptionsRunning);
 
                         isRunningTask.thenAcceptAsync((isRunning) -> {
-                            if(config.isDebugMode()){
-                                log.info("Took " + (System.currentTimeMillis() - timeNow) + "ms. running: " + isRunning);
-                            }
+                            log.debug("Took " + (System.currentTimeMillis() - timeNow) + "ms. running: " + isRunning);
 
                             if(isRunning){
                                 liveCaptionsRunning.set(true);
@@ -190,24 +217,20 @@ public class LiveCaptionsLogger{
 
                 BufferedImage screenshot = robot.createScreenCapture(screenZone);
 
-                if(config.isDebugMode()){
-                    log.info("Captured at " + screenZone);
-                }
+                log.debug("Captured at " + screenZone);
 
                 if(config.isDebugMode() && tick % 10 == 0){
                     try{
                         saveDebugImage(screenshot, "cc_debug.png");
 
-                        log.info("Saved debug image");
+                        log.debug("Saved debug image");
                     }catch(IOException e){
                         handleException(e);
                     }
                 }
 
                 if(!inCaptionBox(screenshot)){
-                    if(config.isDebugMode()){
-                        log.info("CC Window not detected");
-                    }
+                    log.debug("CC Window not detected");
 
                     closeLogger();
                     return;
@@ -236,9 +259,7 @@ public class LiveCaptionsLogger{
                                     return;
                                 }
 
-                                if(config.isDebugMode()){
-                                    log.info("OCR Saw: " + text);
-                                }
+                                log.debug("OCR Saw: " + text);
 
                                 //Process the results
                                 String[] lines = text.split("\\n");
@@ -249,9 +270,7 @@ public class LiveCaptionsLogger{
                                         for(String oldLine : lastLines){
                                             //This checks if more than 80% of a line matches the other
                                             double distance = jaroWinklerDistance.apply(oldLine, line);
-                                            if(config.isDebugMode()){
-                                                log.info("Distance between previous line " + distance + " " + oldLine + ":" + line);
-                                            }
+                                            log.debug("Distance between previous line " + distance + " " + oldLine + ":" + line);
 
                                             if(distance <= 0.20 || oldLine.contains(line)){
                                                 contains = true;
@@ -263,9 +282,7 @@ public class LiveCaptionsLogger{
 
                                             double distance = jaroWinklerDistance.apply(oldestEntry,
                                                 lastPrintedLine != null ? lastPrintedLine : "");
-                                            if(config.isDebugMode()){
-                                                log.info("Distance from the last line " + distance);
-                                            }
+                                            log.debug("Distance from the last line " + distance);
 
                                             if(distance > 0.20){
                                                 lastPrintedLine = oldestEntry;
@@ -299,9 +316,7 @@ public class LiveCaptionsLogger{
                         tesseractLock.unlock();
                     }
                 }else{
-                    if(config.isDebugMode()){
-                        log.warn("Could not acquire lock. Skipping OCR.");
-                    }
+                    log.debug("Could not acquire lock. Skipping OCR.");
                 }
             };
 
@@ -447,9 +462,7 @@ public class LiveCaptionsLogger{
             if(result == JFileChooser.APPROVE_OPTION){
                 String selectedDirectory = fileChooser.getSelectedFile().getAbsolutePath();
 
-                if(config.isDebugMode()){
-                    log.info("Selected Directory: " + selectedDirectory);
-                }
+                log.debug("Selected Directory: " + selectedDirectory);
 
                 trayIcon.displayMessage(REGISTRY_APP_NAME, "Output path set to " + selectedDirectory, TrayIcon.MessageType.INFO);
 
@@ -502,7 +515,7 @@ public class LiveCaptionsLogger{
      * Updates the capture area based on the output generated by ScreenSnipper
      * and scales/downscales it based on the current screen scale.
      */
-    public void setBounds(int startX, int startY, int endX, int endY){
+    public final void setBounds(int startX, int startY, int endX, int endY){
         AffineTransform transform = getGraphicsTransformAt(config.getBoxStartX(), config.getBoxStartY());
         double scaleX = transform.getScaleX();
         double scaleY = transform.getScaleY();
@@ -550,7 +563,7 @@ public class LiveCaptionsLogger{
      * If the coordinates are not within any specific screen device,
      * the default screen device's graphics transform is returned.
      */
-    public AffineTransform getGraphicsTransformAt(int x, int y){
+    private AffineTransform getGraphicsTransformAt(int x, int y){
         GraphicsEnvironment environment = GraphicsEnvironment.getLocalGraphicsEnvironment();
 
         GraphicsDevice device = null;
@@ -573,7 +586,7 @@ public class LiveCaptionsLogger{
     /**
      * Opens the tool to manually select the captions capture area.
      */
-    public void openSnipper(){
+    public final void openSnipper(){
         if(snipper != null){
             closeSnipper();
             return;
@@ -592,7 +605,7 @@ public class LiveCaptionsLogger{
      * Closes the tool to manually select the captions capture area
      * when called by ScreenSnipper itself.
      */
-    public void closeSnipper(){
+    public final void closeSnipper(){
         if(snipper != null){
             snipper.setVisible(false);
             snipper.dispose();
@@ -617,15 +630,43 @@ public class LiveCaptionsLogger{
 
     /**
      * This shortcut is specific to Windows 11.
-     *
-     * TODO: check windows version
      */
-    private void startLiveCaptions(){
-        if(isWindows()){
+    public final void startLiveCaptions(){
+        if(isWindows11()){
             try{
-                Runtime.getRuntime().exec("LiveCaptions.exe");
+                ProcessBuilder processBuilder = new ProcessBuilder(
+                    "taskkill", "/f", "/im", "LiveCaptions.exe");
+
+                processBuilder.start();
             }catch(IOException e){
                 handleException(e);
+            }
+        }
+    }
+
+    /**
+     * This shortcut is specific to Windows 11.
+     */
+    public final void stopLiveCaptions(){
+        if(isWindows11()){
+            try{
+                //It gets in the way due to the always on top nature of live captions
+                //this only runs on Windows 11
+                ProcessBuilder processBuilder = new ProcessBuilder(
+                    "taskkill", "/f", "/im", "LiveCaptions.exe");
+
+                Process process = processBuilder.start();
+                int exitCode = process.waitFor();
+
+                if(exitCode == 0){
+                    log.info("Process killed successfully.");
+                }else{
+                    log.error("Failed to kill the process. Exit code: {}", exitCode);
+                }
+            }catch(IOException e){
+                handleException(e);
+            }catch(InterruptedException e){
+                //Nothing
             }
         }
     }
@@ -640,6 +681,14 @@ public class LiveCaptionsLogger{
     private void updateConfig(Settings configIn){
         try{
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, configIn);
+
+            JsonNode jsonNode = objectMapper.valueToTree(configIn);
+
+            objectMapper.readerForUpdating(config).readValue(jsonNode);
+
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(configFile, configIn);
+
+            LoggerUtils.setDebugLogLevel(configIn.isDebugMode());
         }catch(IOException e){
             handleException(e);
         }
@@ -656,6 +705,63 @@ public class LiveCaptionsLogger{
                 -> command.contains("LiveCaptions.exe")).orElse(false));
     }
 
+    @Nullable
+    private static String getJarLocation(){
+        try{
+            URI jarPath = LiveCaptionsLogger.class.getProtectionDomain().getCodeSource().getLocation().toURI();
+
+            if(jarPath.toString().endsWith(".jar")){
+                return new File(jarPath).getAbsolutePath();
+            }
+        }catch(URISyntaxException e){
+            //Ignore
+        }
+
+        return null;
+    }
+
+    @Nullable
+    private List<String> getLaunchCommand(){
+        List<String> launchString = null;
+
+        String jarLocation = getJarLocation();
+        if(jarLocation != null){
+            String javaHome = System.getProperty("java.home");
+
+            if(javaHome == null || javaHome.isEmpty()){
+                javaHome = System.getenv("JAVA_HOME");
+            }
+
+            if(javaHome != null && !javaHome.isEmpty()){
+                if(!javaHome.endsWith(File.separator)){
+                    javaHome = javaHome + File.separator;
+                }
+
+                String javaPath;
+                String os = System.getProperty("os.name").toLowerCase();
+                if(os.contains("win")){
+                    javaPath = javaHome + "bin" + File.separator + "javaw.exe";
+                }else{
+                    javaPath = javaHome + "bin" + File.separator + "java";
+                }
+
+                String jarString = new File(jarLocation).getAbsolutePath();
+
+                launchString = List.of(javaPath, "-jar", jarString);
+            }else{
+                log.error("Runtime type is .jar but JAVA_HOME is not set. Cannot restart program if necessary.");
+            }
+        }
+
+        if(launchString == null || launchString.isEmpty()){
+            return null;
+        }
+
+        log.debug("Launching from {}", launchString);
+
+        return launchString;
+    }
+
     /**
      * Toggles the status of automatic startup
      *
@@ -664,6 +770,15 @@ public class LiveCaptionsLogger{
      */
     private boolean checkStartupStatusAndToggle(){
         try{
+            List<String> launchString = getLaunchCommand();
+
+            log.debug("Launch command is: {}", launchString);
+
+            if(launchString == null || launchString.isEmpty()){
+                log.error("Cannot locate runtime binary.");
+                return false;
+            }
+
             ProcessBuilder checkBuilder = new ProcessBuilder("reg", "query",
                 "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                 "/v", REGISTRY_APP_NAME);
@@ -672,6 +787,8 @@ public class LiveCaptionsLogger{
             checkProcess.waitFor();
 
             int checkExitValue = checkProcess.exitValue();
+
+            log.debug("Check startup status: {}", checkExitValue);
 
             if(checkExitValue == 0){
                 ProcessBuilder deleteBuilder = new ProcessBuilder("reg", "delete",
@@ -692,38 +809,49 @@ public class LiveCaptionsLogger{
 
                 return false;
             }else{
-                //Shenanigans to figure out the location of our JAR file
-                String jarPath = new File(LiveCaptionsLogger.class.getProtectionDomain().getCodeSource().getLocation()
-                    .toURI()).getPath();
-
-                //The PATH does not seem to be evaluated at this stage
-                //String launchString = "start /b javaw -Xmx256M -jar \\\"" + jarPath + "\\\"";
-                String launchString = jarPath;
-                launchString = launchString.replace("target\\LiveCaptionsLogger.jar", "start.bat");
-                launchString = launchString.replace("target/LiveCaptionsLogger.jar", "start.bat");
-                launchString = launchString.replace("LiveCaptionsLogger.jar", "start.bat");
-                launchString = launchString.replace("classes", "start.bat");
-                if(config.isDebugMode()){
-                    log.info(launchString);
-                }
-
-                ProcessBuilder createBuilder = new ProcessBuilder(
-                    "reg", "add",
+                List<String> regArgs = new ArrayList<>(List.of("reg", "add",
                     "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                     "/v", REGISTRY_APP_NAME,
                     "/t", "REG_SZ",
-                    "/d", "\\\"" + launchString + "\\\"",
-                    "/f"
-                );
+                    "/d"));
+
+                List<String> programArgs = new ArrayList<>(launchString);
+                programArgs.add("--no-gui");
+
+                StringBuilder builder = new StringBuilder();
+                builder.append("\"");
+
+                for(String arg : programArgs){
+                    if(arg.contains(File.separator)){
+                        builder.append("\\\"").append(arg).append("\\\"").append(" ");
+                    }else{
+                        builder.append(arg).append(" ");
+                    }
+                }
+
+                if(builder.charAt(builder.length() - 1) == ' '){
+                    builder.deleteCharAt(builder.length() - 1);
+                }
+
+                builder.append("\"");
+
+                regArgs.add(builder.toString());
+                regArgs.add("/f");
+
+                ProcessBuilder createBuilder = new ProcessBuilder(regArgs);
 
                 Process process = createBuilder.start();
                 int exitCode = process.waitFor();
 
                 if(config.isDebugMode()){
+                    log.info("Program args: {}", programArgs);
+                    log.info("Startup command args: {}", regArgs);
+
                     if(exitCode == 0){
                         log.info("Registry entry added successfully.");
                     }else{
-                        log.error("Failed to add registry entry. Exit code: " + exitCode);
+                        log.error("Failed to add registry entry. Exit code: {} Command list: {}",
+                            exitCode, createBuilder.command());
                     }
                 }
 
@@ -815,9 +943,7 @@ public class LiveCaptionsLogger{
             int green = (colour >> 8) & 0xFF;
             int blue = colour & 0xFF;
 
-            if(config.isDebugMode()){
-                log.info(red + ":" + green + ":" + blue);
-            }
+            log.debug("Corner RGB: " + red + ":" + green + ":" + blue);
 
             int threshold = config.getCaptionWindowColorThreshold();
 
@@ -871,11 +997,7 @@ public class LiveCaptionsLogger{
      * Returns the Documents path used as default save location.
      */
     private String getDocumentsPath(){
-        if(isWindows()){
-            return System.getProperty("user.home") + "\\Documents";
-        }else{
-            return System.getProperty("user.home") + "/Documents";
-        }
+        return System.getProperty("user.home") + File.separator + "Documents";
     }
 
     public final void handleException(Throwable e){
@@ -886,7 +1008,7 @@ public class LiveCaptionsLogger{
      * Just some rudimentary exception handling.
      */
     public final void handleException(Throwable e, boolean displayToUser){
-        e.printStackTrace();
+        log.error("An exception has been caught", e);
 
         if(displayToUser && trayIcon != null){
             trayIcon.displayMessage(REGISTRY_APP_NAME,
@@ -917,6 +1039,36 @@ public class LiveCaptionsLogger{
         return osName.contains("windows");
     }
 
+    /**
+     * Checks if the current platform is Windows 11.
+     *
+     * This method verifies if the version is 10.0.22000 or higher,
+     * which indicates Windows 11
+     */
+    public static boolean isWindows11(){
+        String osName = System.getProperty("os.name").toLowerCase();
+        String osVersion = System.getProperty("os.version").toLowerCase();
+
+        if(osName.contains("win")){
+            if(osVersion.startsWith("10.0")){//Yes, 10. ¯\_(ツ)_/¯
+                String[] versionParts = osVersion.split("\\.");
+
+                if(versionParts.length > 2 && Integer.parseInt(versionParts[2]) >= 22000){
+                    log.info("Running on Windows 11");
+                    return true;
+                }else{
+                    log.info("Running on Windows 10 or earlier");
+                }
+            }else{
+                log.info("Running on an unknown version of Windows");
+            }
+        }else{
+            log.info("Not running on Windows");
+        }
+
+        return false;
+    }
+
     public static void main(String[] args){
         if(SystemTray.isSupported()){
             log.info("Starting...");
@@ -934,7 +1086,7 @@ public class LiveCaptionsLogger{
                 instance.handleException(e);
             });
         }else{
-            System.err.println("System tray not supported???? did you run this on a calculator?");
+            log.error("System tray not supported???? did you run this on a calculator?");
         }
     }
 }

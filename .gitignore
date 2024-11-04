@@ -4,7 +4,13 @@ nbactions.xml
 config.json
 *.log
 hs_err_pid*
+replay_pid*
 
-# Ignore files and folders under ./target, except LiveCaptionsLogger.jar
 /target/*
-!/target/LiveCaptionsLogger.jar
+
+# Gradle
+.gradle
+**/build/
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+

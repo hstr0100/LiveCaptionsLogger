@@ -22,13 +22,15 @@ Follow these steps to install and run the program:
 [Eclipse Temurin](https://adoptium.net/temurin/releases/)\
 For Windows 11, scroll down and select the x64 JRE .msi, then download and install it.
 
-2. Clone or download this repository (Github > Code > Download ZIP).
+2. If you are using Linux, ensure you have 'tesseract-ocr' installed.
 
-3. Copy or extract the contents to any directory where you would like the program to run from.
+3. Download the latest version of this program from the [releases page](https://github.com/hstr0100/LiveCaptionsLogger/releases).
 
-4. We already provide a pre-compiled JAR of the program, now you can just run the 'start.bat' script to start the program.
+4. Extract the contents to any directory where you would like the program to run from.
 
-5. Right click the tray icon to setup auto start, capture area or toggle transcriptions on and off.
+5. We provide a pre-compiled JAR of the program. Navigate to the bin/ directory and run the LiveCaptionsLogger.bat script to start the program.
+
+6. Right-click the tray icon to set up auto-start, capture area, or toggle transcriptions on and off.
 
 # Building
 
@@ -36,12 +38,18 @@ If you want to compile this program yourself:
 
 1. Ensure you have OpenJDK 11 or a newer version installed. Please note that this requirement differs from the one needed to run precompiled binaries, which only necessitate a JRE.
 
-2. Download and install [Maven](https://maven.apache.org/guides/getting-started/windows-prerequisites.html) for your preferred platform; instructions may vary.\
-Confirm that Maven is added to your system's PATH.
+2. Clone this repository:
+   ```bash
+   git clone https://github.com/hstr0100/LiveCaptionsLogger.git
+   ```
 
-3. Navigate to the directory containing the pom.xml file and execute the following \
-`mvn clean install`\
-or, if you are on Windows:\
-`mvn.cmd clean install`\
-This command will build the JAR file, and the resulting file will be created in the target/ directory.
-
+3. Navigate to the project directory:
+   ```bash
+   cd LiveCaptionsLogger
+   ```
+   
+4. Build the project using Gradle:
+   ```bash
+   ./gradlew clean build
+   ```
+   

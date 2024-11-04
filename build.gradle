@@ -1,0 +1,105 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.gradleup.shadow' version "$shadowPluginVersion"
+}
+
+import org.apache.tools.ant.filters.ReplaceTokens
+
+group = 'net.brlns'
+version = '1.1.0'
+
+def author = 'Gabriel D @hstr0100'
+def lowercaseName = 'livecaptionslogger'
+
+def os = org.gradle.internal.os.OperatingSystem.current()
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
+
+	modularity.inferModulePath = false
+}
+
+repositories {
+    mavenCentral()
+    gradlePluginPortal()
+}
+
+application {
+    mainClass = 'net.brlns.livecaptions.LiveCaptionsLogger'
+    mainModule = 'net.brlns.livecaptions'
+    applicationDefaultJvmArgs = []
+}
+
+dependencies {
+    implementation "org.slf4j:slf4j-api:$slf4jVersion"
+    implementation "net.sourceforge.tess4j:tess4j:$tess4jVersion"
+    implementation "org.apache.commons:commons-text:$commonsTextVersion"
+    compileOnly "org.projectlombok:lombok:$lombokVersion"
+    annotationProcessor "org.projectlombok:lombok:$lombokVersion"
+    implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
+    implementation "ch.qos.logback:logback-classic:$logbackVersion"
+    testImplementation "org.junit.jupiter:junit-jupiter:$jupiterVersion"
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += ['-Xlint:all,-serial,-processing,-requires-automatic']
+}
+
+jar {
+    archiveBaseName.set("${lowercaseName}-java")
+
+    manifest {
+        attributes(
+            'Implementation-Title': 'LiveCaptionsLogger',
+            'Implementation-Version': version,
+            'Implementation-Vendor': author,
+            'Main-Class': application.mainClass.get()
+        )
+    }
+
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+shadowJar {
+    archiveBaseName.set("${lowercaseName}-java")
+    mergeServiceFiles()
+}
+
+//Workaround for https://github.com/gradle/gradle/issues/26155 and https://github.com/johnrengelman/shadow/issues/882
+tasks.named('shadowJar') { shadowJar ->
+    inputs.files(project.configurations.runtimeClasspath)
+    configurations = []
+
+    doFirst {
+        configurations = [project.configurations.runtimeClasspath]
+    }
+}
+
+//Replace java.exe with javaw.exe to disable console output
+task replaceJavaExeInBatchFiles {
+    doLast {
+        def scriptsDir = file("${buildDir}/scriptsShadow")
+        if (scriptsDir.exists()) {
+            scriptsDir.eachFileMatch(~/.*\.bat/) { file ->
+                def text = file.text
+                text = text.replaceAll("java.exe", "javaw.exe")
+                text = text.replaceAll("\"%JAVA_EXE%\" %", "start /b \"\" \"%JAVA_EXE%\" %")
+                file.write(text)
+            }
+        }
+    }
+}
+
+tasks.named('startShadowScripts') {
+    finalizedBy(replaceJavaExeInBatchFiles)
+}
