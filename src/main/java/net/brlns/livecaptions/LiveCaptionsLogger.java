@@ -174,10 +174,15 @@ public class LiveCaptionsLogger{
             Runnable captureAndProcess = () -> {
                 int tick = currentTick.incrementAndGet();
 
-                log.debug("Tick #" + tick);
+                if(config.isDebugMode()){
+                    log.debug("Tick #" + tick);
+                }
 
                 if(!config.isCurrentlyLogging()){
-                    log.info("Logging is off");
+                    if(config.isDebugMode()){
+                        log.debug("Logging is off");
+                    }
+
                     return;
                 }
 
@@ -190,7 +195,9 @@ public class LiveCaptionsLogger{
                         CompletableFuture<Boolean> isRunningTask = CompletableFuture.supplyAsync(this::isLiveCaptionsRunning);
 
                         isRunningTask.thenAcceptAsync((isRunning) -> {
-                            log.debug("Took " + (System.currentTimeMillis() - timeNow) + "ms. running: " + isRunning);
+                            if(config.isDebugMode()){
+                                log.debug("Took " + (System.currentTimeMillis() - timeNow) + "ms. running: " + isRunning);
+                            }
 
                             if(isRunning){
                                 liveCaptionsRunning.set(true);
@@ -210,17 +217,20 @@ public class LiveCaptionsLogger{
                     //This is not exactly mission-critical, LiveCaptions takes time to start up or wind down.
                     //If the async future takes too long, it's acceptable for this to be updated around the next tick.
                     if(!liveCaptionsRunning.get()){
-                        log.info("Sensed that LiveCaptions is not running, logging is off");
+                        if(config.isDebugMode()){
+                            log.debug("Sensed that LiveCaptions is not running, logging is off");
+                        }
+
                         return;
                     }
                 }
 
                 BufferedImage screenshot = robot.createScreenCapture(screenZone);
 
-                log.debug("Captured at " + screenZone);
-
                 if(config.isDebugMode() && tick % 10 == 0){
                     try{
+                        log.debug("Captured at " + screenZone);
+
                         saveDebugImage(screenshot, "cc_debug.png");
 
                         log.debug("Saved debug image");
@@ -230,7 +240,9 @@ public class LiveCaptionsLogger{
                 }
 
                 if(!inCaptionBox(screenshot)){
-                    log.debug("CC Window not detected");
+                    if(config.isDebugMode()){
+                        log.debug("CC Window not detected");
+                    }
 
                     closeLogger();
                     return;
@@ -259,7 +271,9 @@ public class LiveCaptionsLogger{
                                     return;
                                 }
 
-                                log.debug("OCR Saw: " + text);
+                                if(config.isDebugMode()){
+                                    log.debug("OCR Saw: " + text);
+                                }
 
                                 //Process the results
                                 String[] lines = text.split("\\n");
@@ -270,7 +284,9 @@ public class LiveCaptionsLogger{
                                         for(String oldLine : lastLines){
                                             //This checks if more than 80% of a line matches the other
                                             double distance = jaroWinklerDistance.apply(oldLine, line);
-                                            log.debug("Distance between previous line " + distance + " " + oldLine + ":" + line);
+                                            if(config.isDebugMode()){
+                                                log.debug("Distance between previous line " + distance + " " + oldLine + ":" + line);
+                                            }
 
                                             if(distance <= 0.20 || oldLine.contains(line)){
                                                 contains = true;
@@ -282,7 +298,9 @@ public class LiveCaptionsLogger{
 
                                             double distance = jaroWinklerDistance.apply(oldestEntry,
                                                 lastPrintedLine != null ? lastPrintedLine : "");
-                                            log.debug("Distance from the last line " + distance);
+                                            if(config.isDebugMode()){
+                                                log.debug("Distance from the last line " + distance);
+                                            }
 
                                             if(distance > 0.20){
                                                 lastPrintedLine = oldestEntry;
@@ -307,7 +325,9 @@ public class LiveCaptionsLogger{
                             //We can't cancel OCR when it decides to hang at a native level, and this workaround is not safe either
                             //This is something that should be addressed by Tesseract or tess4j's team
                             if(!executorService.awaitTermination(3000, TimeUnit.MILLISECONDS)){
-                                log.error("Skipping a tick, OCR took too long");
+                                if(config.isDebugMode()){
+                                    log.error("Skipping a tick, OCR took too long");
+                                }
                             }
                         }catch(InterruptedException e){
                             //Nothing
@@ -316,7 +336,9 @@ public class LiveCaptionsLogger{
                         tesseractLock.unlock();
                     }
                 }else{
-                    log.debug("Could not acquire lock. Skipping OCR.");
+                    if(config.isDebugMode()){
+                        log.debug("Could not acquire lock. Skipping OCR.");
+                    }
                 }
             };
 
@@ -954,7 +976,9 @@ public class LiveCaptionsLogger{
             int green = (colour >> 8) & 0xFF;
             int blue = colour & 0xFF;
 
-            log.debug("Corner RGB: " + red + ":" + green + ":" + blue);
+            if(config.isDebugMode()){
+                log.debug("Corner RGB: " + red + ":" + green + ":" + blue);
+            }
 
             int threshold = config.getCaptionWindowColorThreshold();
 
@@ -966,7 +990,9 @@ public class LiveCaptionsLogger{
      * Logs finished lines to disk.
      */
     private void logToFile(String line){
-        log.info("Line Finished: " + line);
+        if(config.isDebugMode()){
+            log.info("Line Finished: " + line);
+        }
 
         if(currentFile == null){
             Calendar now = Calendar.getInstance();
@@ -1065,16 +1091,9 @@ public class LiveCaptionsLogger{
                 String[] versionParts = osVersion.split("\\.");
 
                 if(versionParts.length > 2 && Integer.parseInt(versionParts[2]) >= 22000){
-                    log.info("Running on Windows 11");
                     return true;
-                }else{
-                    log.info("Running on Windows 10 or earlier");
                 }
-            }else{
-                log.info("Running on an unknown version of Windows");
             }
-        }else{
-            log.info("Not running on Windows");
         }
 
         return false;
