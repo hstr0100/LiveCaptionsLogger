@@ -7,12 +7,10 @@ plugins {
 import org.apache.tools.ant.filters.ReplaceTokens
 
 group = 'net.brlns'
-version = '1.1.0'
+version = '1.1.1'
 
 def author = 'Gabriel D @hstr0100'
 def lowercaseName = 'livecaptionslogger'
-
-def os = org.gradle.internal.os.OperatingSystem.current()
 
 java {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -22,7 +20,7 @@ java {
         languageVersion = JavaLanguageVersion.of(11)
     }
 
-	modularity.inferModulePath = false
+    modularity.inferModulePath = false
 }
 
 repositories {
@@ -33,7 +31,6 @@ repositories {
 application {
     mainClass = 'net.brlns.livecaptions.LiveCaptionsLogger'
     mainModule = 'net.brlns.livecaptions'
-    applicationDefaultJvmArgs = []
 }
 
 dependencies {
@@ -44,11 +41,6 @@ dependencies {
     annotationProcessor "org.projectlombok:lombok:$lombokVersion"
     implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
     implementation "ch.qos.logback:logback-classic:$logbackVersion"
-    testImplementation "org.junit.jupiter:junit-jupiter:$jupiterVersion"
-}
-
-test {
-    useJUnitPlatform()
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -73,16 +65,6 @@ jar {
 shadowJar {
     archiveBaseName.set("${lowercaseName}-java")
     mergeServiceFiles()
-}
-
-//Workaround for https://github.com/gradle/gradle/issues/26155 and https://github.com/johnrengelman/shadow/issues/882
-tasks.named('shadowJar') { shadowJar ->
-    inputs.files(project.configurations.runtimeClasspath)
-    configurations = []
-
-    doFirst {
-        configurations = [project.configurations.runtimeClasspath]
-    }
 }
 
 //Replace java.exe with javaw.exe to disable console output
