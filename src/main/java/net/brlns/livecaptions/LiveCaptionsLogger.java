@@ -699,12 +699,20 @@ public class LiveCaptionsLogger{
      * This is specific to Windows 11.
      */
     private boolean isLiveCaptionsRunning(){
+        if(!isWindows11()){
+            return false;
+        }
+
         return ProcessHandle.allProcesses()
             .anyMatch((processHandle)
                 -> processHandle.info().command().map((command)
                 -> command.contains("LiveCaptions.exe")).orElse(false));
     }
 
+    /**
+     * Retrieves the absolute path of the currently running JAR file.
+     * or null if not a JAR.
+     */
     @Nullable
     private static String getJarLocation(){
         try{
@@ -720,6 +728,9 @@ public class LiveCaptionsLogger{
         return null;
     }
 
+    /**
+     * Constructs the launch command for the currently running JAR file.
+     */
     @Nullable
     private List<String> getLaunchCommand(){
         List<String> launchString = null;

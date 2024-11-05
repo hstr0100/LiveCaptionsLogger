@@ -27,6 +27,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.LoggerFactory;
 
 /**
+ * Utility class for configuring the application logger.
+ *
  * @author Gabriel / hstr0100 / vertx010
  */
 @Slf4j
@@ -36,6 +38,14 @@ public class LoggerUtils{
 
     private static final Level DEFAULT_LOG_LEVEL = Level.INFO;
 
+    /**
+     * Sets the log file
+     *
+     * This method creates a new file appender with a specified log file
+     * location and attaches it to the root logger.
+     *
+     * @param logFile the file where logs will be written
+     */
     public static void setLogFile(File logFile){
         LoggerContext loggerContext = (LoggerContext)LoggerFactory.getILoggerFactory();
         Logger logger = loggerContext.getLogger("ROOT");
@@ -56,6 +66,12 @@ public class LoggerUtils{
         logger.addAppender(fileAppender);
     }
 
+    /**
+     * Sets the logging level
+     *
+     * @param debug if true, sets the log level to DEBUG;
+     * otherwise, sets it to INFO.
+     */
     public static void setDebugLogLevel(boolean debug){
         LoggerContext loggerContext = (LoggerContext)LoggerFactory.getILoggerFactory();
         Logger logger = loggerContext.getLogger("ROOT");

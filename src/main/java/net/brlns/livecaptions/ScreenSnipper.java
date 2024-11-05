@@ -23,6 +23,8 @@ import java.awt.image.BufferedImage;
 import lombok.extern.slf4j.Slf4j;
 
 /**
+ * Allows users to select a region of the screen to watch for live captions.
+ *
  * @author Gabriel / hstr0100 / vertx010
  */
 @Slf4j
@@ -53,6 +55,9 @@ public class ScreenSnipper extends Window{
         shadowRatio = 0.6;
     }
 
+    /**
+     * Initializes the screen snipper.
+     */
     public void init(){
         screenRect = getScreenBounds();
         captureReferenceScreenState();
@@ -164,6 +169,9 @@ public class ScreenSnipper extends Window{
         endY = y;
     }
 
+    /**
+     * Retrieves the bounds of all screens combined.
+     */
     private Rectangle getScreenBounds(){
         Rectangle bounds = new Rectangle(0, 0, 0, 0);
         for(GraphicsDevice gd : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()){
@@ -173,6 +181,9 @@ public class ScreenSnipper extends Window{
         return bounds;
     }
 
+    /**
+     * Mouse listener for selecting the screen region.
+     */
     private class SnippingMouseListener extends MouseAdapter{
 
         @Override
