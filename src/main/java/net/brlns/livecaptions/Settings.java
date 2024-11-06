@@ -27,7 +27,7 @@ import lombok.Data;
  */
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Settings{
+public class Settings {
 
     /**
      * Screen coordinates for the live captions

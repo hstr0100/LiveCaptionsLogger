@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * @author Gabriel / hstr0100 / vertx010
  */
 @Slf4j
-public class LoggerUtils{
+public class LoggerUtils {
 
     private static final String LOG_PATTERN = "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n";
 
@@ -46,7 +46,7 @@ public class LoggerUtils{
      *
      * @param logFile the file where logs will be written
      */
-    public static void setLogFile(File logFile){
+    public static void setLogFile(File logFile) {
         LoggerContext loggerContext = (LoggerContext)LoggerFactory.getILoggerFactory();
         Logger logger = loggerContext.getLogger("ROOT");
 
@@ -72,15 +72,15 @@ public class LoggerUtils{
      * @param debug if true, sets the log level to DEBUG;
      * otherwise, sets it to INFO.
      */
-    public static void setDebugLogLevel(boolean debug){
+    public static void setDebugLogLevel(boolean debug) {
         LoggerContext loggerContext = (LoggerContext)LoggerFactory.getILoggerFactory();
         Logger logger = loggerContext.getLogger("ROOT");
 
-        if(debug && logger.getLevel() != Level.DEBUG){
+        if (debug && logger.getLevel() != Level.DEBUG) {
             logger.setLevel(Level.DEBUG);
 
             log.info("Log level changed to: {}", logger.getLevel());
-        }else if(!debug && logger.getLevel() != DEFAULT_LOG_LEVEL){
+        } else if (!debug && logger.getLevel() != DEFAULT_LOG_LEVEL) {
             logger.setLevel(DEFAULT_LOG_LEVEL);
 
             log.info("Log level changed to: {}", logger.getLevel());

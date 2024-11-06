@@ -28,7 +28,7 @@ import lombok.extern.slf4j.Slf4j;
  * @author Gabriel / hstr0100 / vertx010
  */
 @Slf4j
-public class ScreenSnipper extends Window{
+public class ScreenSnipper extends Window {
 
     private static final int X_INDEX = 0;
     private static final int Y_INDEX = 1;
@@ -48,7 +48,7 @@ public class ScreenSnipper extends Window{
     private static final Font TEXT_FONT = new Font("SansSerif", Font.BOLD, 25);
     private static final Color TEXT_COLOR = Color.WHITE;
 
-    public ScreenSnipper(LiveCaptionsLogger mainIn, Window ownerIn){
+    public ScreenSnipper(LiveCaptionsLogger mainIn, Window ownerIn) {
         super(ownerIn);
 
         main = mainIn;
@@ -58,7 +58,7 @@ public class ScreenSnipper extends Window{
     /**
      * Initializes the screen snipper.
      */
-    public void init(){
+    public void init() {
         screenRect = getScreenBounds();
         captureReferenceScreenState();
 
@@ -75,11 +75,11 @@ public class ScreenSnipper extends Window{
     }
 
     @Override
-    public void paint(Graphics g){
+    public void paint(Graphics g) {
         super.paint(g);
 
-        if(screenStateCache != null){
-            if(screenBuffer == null){
+        if (screenStateCache != null) {
+            if (screenBuffer == null) {
                 screenBuffer = selectRegion(screenStateCache, screenShadowCache, screenRect.width, screenRect.height, startX, startY, endX, endY);
                 drawTextOnImage(screenBuffer, "Drag the cursor to select the live captions area");
             }
@@ -89,33 +89,33 @@ public class ScreenSnipper extends Window{
     }
 
     @Override
-    public void update(Graphics g){
+    public void update(Graphics g) {
         screenBuffer = selectRegion(screenStateCache, screenShadowCache, screenRect.width, screenRect.height, startX, startY, endX, endY);
 
         paint(g);
     }
 
-    private void captureReferenceScreenState(){
-        try{
+    private void captureReferenceScreenState() {
+        try {
             Robot robot = new Robot();
             BufferedImage screenshot = robot.createScreenCapture(screenRect);
             int width = screenRect.width, height = screenRect.height;
             screenStateCache = screenshot.getRGB(0, 0, width, height, null, 0, width);
             screenShadowCache = getShadow(screenStateCache, width, height);
-        }catch(AWTException e){
+        } catch (AWTException e) {
             main.handleException(e);
         }
     }
 
-    private void setupZone(int startX, int startY, int endX, int endY){
-        try{
+    private void setupZone(int startX, int startY, int endX, int endY) {
+        try {
             main.setBounds(startX, startY, endX, endY);
-        }finally{
+        } finally {
             main.closeSnipper();
         }
     }
 
-    private void drawTextOnImage(BufferedImage image, String text){
+    private void drawTextOnImage(BufferedImage image, String text) {
         Graphics2D g = image.createGraphics();
         g.setFont(TEXT_FONT);
         FontMetrics metrics = g.getFontMetrics(TEXT_FONT);
@@ -126,13 +126,13 @@ public class ScreenSnipper extends Window{
         g.dispose();
     }
 
-    private BufferedImage selectRegion(int[] img, int[] imgShadow, int width, int height, int startX, int startY, int endX, int endY){
+    private BufferedImage selectRegion(int[] img, int[] imgShadow, int width, int height, int startX, int startY, int endX, int endY) {
         int[] copyImg = new int[width * height];
         int[] llc = {Math.min(startX, endX), Math.min(startY, endY)};
         int[] urc = {Math.max(startX, endX), Math.max(startY, endY)};
         System.arraycopy(imgShadow, 0, copyImg, 0, width * height);
 
-        for(int y = llc[Y_INDEX]; y < urc[Y_INDEX]; y++){
+        for (int y = llc[Y_INDEX]; y < urc[Y_INDEX]; y++) {
             System.arraycopy(img, y * width + llc[X_INDEX], copyImg, y * width + llc[X_INDEX], urc[X_INDEX] - llc[X_INDEX]);
         }
 
@@ -142,16 +142,16 @@ public class ScreenSnipper extends Window{
         return finalImg;
     }
 
-    private int[] getShadow(int[] img, int width, int height){
+    private int[] getShadow(int[] img, int width, int height) {
         int[] copyImg = new int[width * height];
-        for(int i = 0; i < copyImg.length; i++){
+        for (int i = 0; i < copyImg.length; i++) {
             copyImg[i] = createShadow(img[i], shadowRatio);
         }
 
         return copyImg;
     }
 
-    private int createShadow(int rgb, double ratio){
+    private int createShadow(int rgb, double ratio) {
         int red = Math.min(255, (int)(((rgb >> 16) & 0xFF) * ratio));
         int blue = Math.min(255, (int)(((rgb >> 8) & 0xFF) * ratio));
         int green = Math.min(255, (int)((rgb & 0xFF) * ratio));
@@ -159,12 +159,12 @@ public class ScreenSnipper extends Window{
         return (red << 16) + (blue << 8) + green;
     }
 
-    private void setStartingPoint(int x, int y){
+    private void setStartingPoint(int x, int y) {
         startX = x;
         startY = y;
     }
 
-    private void setEndPoint(int x, int y){
+    private void setEndPoint(int x, int y) {
         endX = x;
         endY = y;
     }
@@ -172,9 +172,9 @@ public class ScreenSnipper extends Window{
     /**
      * Retrieves the bounds of all screens combined.
      */
-    private Rectangle getScreenBounds(){
+    private Rectangle getScreenBounds() {
         Rectangle bounds = new Rectangle(0, 0, 0, 0);
-        for(GraphicsDevice gd : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()){
+        for (GraphicsDevice gd : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
             bounds = bounds.union(gd.getDefaultConfiguration().getBounds());
         }
 
@@ -184,21 +184,21 @@ public class ScreenSnipper extends Window{
     /**
      * Mouse listener for selecting the screen region.
      */
-    private class SnippingMouseListener extends MouseAdapter{
+    private class SnippingMouseListener extends MouseAdapter {
 
         @Override
-        public void mousePressed(MouseEvent e){
+        public void mousePressed(MouseEvent e) {
             setStartingPoint(e.getX(), e.getY());
         }
 
         @Override
-        public void mouseDragged(MouseEvent e){
+        public void mouseDragged(MouseEvent e) {
             setEndPoint(e.getX(), e.getY());
             update(getGraphics());
         }
 
         @Override
-        public void mouseReleased(MouseEvent e){
+        public void mouseReleased(MouseEvent e) {
             setEndPoint(e.getX(), e.getY());
             setupZone(startX, startY, endX, endY);
         }
