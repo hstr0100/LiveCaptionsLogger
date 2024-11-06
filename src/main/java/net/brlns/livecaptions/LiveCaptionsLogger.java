@@ -31,6 +31,8 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -96,8 +98,10 @@ public class LiveCaptionsLogger{
 
     @SuppressWarnings("this-escape") //TODO: properly deal with this, the issue lies in openSnipper()
     public LiveCaptionsLogger(){
-        File logFile = new File("application_log.txt");
-        File previousLogFile = new File("application_log_previous.txt");
+        File workDir = getWorkDirectory();
+
+        File logFile = new File(workDir, "application_log.txt");
+        File previousLogFile = new File(workDir, "application_log_previous.txt");
 
         if(logFile.exists()){
             if(previousLogFile.exists()){
@@ -110,7 +114,7 @@ public class LiveCaptionsLogger{
         LoggerUtils.setLogFile(logFile);
 
         //Initialize the config file
-        configFile = new File("config.json");
+        configFile = new File(workDir, "config.json");
 
         if(!configFile.exists()){
             config = new Settings();
@@ -1028,6 +1032,44 @@ public class LiveCaptionsLogger{
         }
 
         return file;
+    }
+
+    private static File _cachedWorkDir;
+
+    /**
+     * Retrieves the default save path for log and configuration files.
+     *
+     * @return File
+     */
+    public static File getWorkDirectory(){
+        if(_cachedWorkDir == null){
+            Path appDir;
+
+            String os = System.getProperty("os.name").toLowerCase();
+            String userHome = System.getProperty("user.home");
+
+            if(os.contains("win")){
+                String appData = System.getenv("APPDATA");
+
+                if(appData != null){
+                    appDir = Paths.get(appData, REGISTRY_APP_NAME);
+                }else{
+                    appDir = Paths.get(userHome, "AppData", "Roaming", REGISTRY_APP_NAME);
+                }
+            }else if(os.contains("mac")){
+                appDir = Paths.get(userHome, "Library", "Application Support", REGISTRY_APP_NAME);
+            }else{
+                appDir = Paths.get(userHome, "." + REGISTRY_APP_NAME.toLowerCase());
+            }
+
+            _cachedWorkDir = appDir.toFile();
+
+            if(!_cachedWorkDir.exists()){
+                _cachedWorkDir.mkdirs();
+            }
+        }
+
+        return _cachedWorkDir;
     }
 
     /**
